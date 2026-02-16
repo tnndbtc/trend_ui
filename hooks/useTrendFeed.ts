@@ -37,6 +37,10 @@ export function useTrendFeed({
   // Track seen IDs to prevent duplicates
   const seenIdsRef = useRef<Set<number>>(new Set())
 
+  // Rate limiting state
+  const lastFailureTime = useRef<number>(0)
+  const isRateLimited = useRef<boolean>(false)
+
   // Filter items based on dismissed/hidden
   const items = allItems.filter(item => {
     const itemId = item.id.toString()
@@ -59,6 +63,19 @@ export function useTrendFeed({
 
   const fetchNext = useCallback(async (reset = false) => {
     console.log('[useTrendFeed] fetchNext called with reset:', reset, { hasMore, loadingMore, loading })
+
+    // Check rate limiting
+    if (isRateLimited.current) {
+      const timeSinceFailure = Date.now() - lastFailureTime.current
+      const backoffDuration = 2000 // 2 seconds backoff
+
+      if (timeSinceFailure < backoffDuration) {
+        console.log('[useTrendFeed] Rate limited - waiting', backoffDuration - timeSinceFailure, 'ms')
+        return
+      }
+      isRateLimited.current = false
+    }
+
     if (!reset && (!hasMore || loadingMore || loading)) {
       console.log('[useTrendFeed] Early return - conditions not met')
       return
@@ -71,6 +88,9 @@ export function useTrendFeed({
       setNextCursor(null)
       setHasMore(true)
       seenIdsRef.current.clear()
+      // Clear rate limit on reset
+      isRateLimited.current = false
+      lastFailureTime.current = 0
     } else {
       setLoadingMore(true)
       setError(null)
@@ -109,9 +129,16 @@ export function useTrendFeed({
 
       setNextCursor(response.next_cursor || null)
       setHasMore(response.has_more ?? false)
+
+      // Clear error on success
+      setError(null)
     } catch (err) {
       console.error('[useTrendFeed] Failed to load trends:', err)
       setError('Failed to load trends. Please try again.')
+
+      // Activate rate limiting
+      isRateLimited.current = true
+      lastFailureTime.current = Date.now()
     } finally {
       setLoading(false)
       setLoadingMore(false)

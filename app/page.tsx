@@ -1,16 +1,23 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import type { Language } from '@/types/trend'
+import { Virtuoso } from 'react-virtuoso'
 import { useTrendFeed } from '@/hooks/useTrendFeed'
 import { useCardMenu } from '@/hooks/useCardMenu'
+import { useScrollRestoration } from '@/hooks/useScrollRestoration'
 import { FeedCard } from '@/components/FeedCard'
 import { FiltersBar } from '@/components/FiltersBar'
 import { LoadingCard } from '@/components/LoadingCard'
 import { EmptyState } from '@/components/EmptyState'
+import { CaughtUpState } from '@/components/CaughtUpState'
+
+// Threshold for switching to virtualized rendering
+const VIRTUALIZATION_THRESHOLD = 500
 
 export default function FeedPage() {
   const [language, setLanguage] = useState<Language>('en-US')
+  const [feedStartTime, setFeedStartTime] = useState<Date>(new Date())
 
   // Menu actions (dismiss, hide source)
   const { dismissedItems, hiddenPlatforms, dismissItem, hidePlatform } = useCardMenu()
@@ -22,7 +29,19 @@ export default function FeedPage() {
     language,
   })
 
-  console.log('[FeedPage] Render state:', { itemsCount: items.length, loading, error })
+  // Scroll restoration for session continuity
+  const scrollRestoration = useScrollRestoration({
+    items,
+    cursor: null, // We'll integrate cursor if needed
+    shouldRestore: true,
+  })
+
+  console.log('[FeedPage] Render state:', {
+    itemsCount: items.length,
+    loading,
+    error,
+    shouldRestore: scrollRestoration.shouldRestoreItems
+  })
 
   // Ref for IntersectionObserver sentinel
   const sentinelRef = useRef<HTMLDivElement>(null)
@@ -46,24 +65,38 @@ export default function FeedPage() {
     if (initialFetchDone.current && prevLanguage.current !== null && prevLanguage.current !== language) {
       console.log('[FeedPage] Language changed from', prevLanguage.current, 'to', language, '- refetching')
       prevLanguage.current = language
+      scrollRestoration.clearSession() // Clear session on filter change
+      setFeedStartTime(new Date())
       fetchNext(true)
     }
-  }, [language, fetchNext])
+  }, [language, fetchNext, scrollRestoration])
 
-  // Setup IntersectionObserver for infinite scroll
+  // Determine if virtualization should be used
+  const useVirtualization = items.length > VIRTUALIZATION_THRESHOLD
+
+  // Callback for Virtuoso to load more items
+  const loadMore = useCallback(() => {
+    if (hasMore && !loadingMore && !loading && !error) {
+      console.log('[FeedPage] Virtuoso endReached - fetching next page')
+      fetchNext(false)
+    }
+  }, [hasMore, loadingMore, loading, error, fetchNext])
+
+  // Setup IntersectionObserver for infinite scroll (non-virtualized mode)
   useEffect(() => {
-    if (!sentinelRef.current) return
+    if (useVirtualization || !sentinelRef.current) return
 
     const observer = new IntersectionObserver(
       (entries) => {
         const [entry] = entries
         if (entry.isIntersecting && hasMore && !loadingMore && !loading) {
+          console.log('[FeedPage] Sentinel triggered - fetching next page')
           fetchNext(false)
         }
       },
       {
         root: null,
-        rootMargin: '100px',
+        rootMargin: '600px', // Early preload when within 600px
         threshold: 0.1,
       }
     )
@@ -73,7 +106,7 @@ export default function FeedPage() {
     return () => {
       observer.disconnect()
     }
-  }, [hasMore, loadingMore, loading, fetchNext])
+  }, [useVirtualization, hasMore, loadingMore, loading, fetchNext])
 
   return (
     <div className="min-h-screen bg-background">
@@ -83,7 +116,7 @@ export default function FeedPage() {
       </div>
 
       {/* Feed */}
-      <div className="container mx-auto px-4 py-6 max-w-2xl">
+      <div className="feed-container">
         {loading ? (
           // Loading skeleton
           <div className="space-y-4">
@@ -94,8 +127,57 @@ export default function FeedPage() {
         ) : items.length === 0 ? (
           // Empty state
           <EmptyState onRetry={() => fetchNext(true)} />
+        ) : useVirtualization ? (
+          // Virtualized feed for >500 items
+          <Virtuoso
+            data={items}
+            endReached={loadMore}
+            overscan={300}
+            itemContent={(index, item) => (
+              <div className="pb-4" key={item.id}>
+                <FeedCard
+                  item={item}
+                  language={language}
+                  onDismiss={dismissItem}
+                  onHidePlatform={hidePlatform}
+                />
+              </div>
+            )}
+            components={{
+              Footer: () => (
+                <>
+                  {loadingMore && (
+                    <div className="py-8">
+                      <LoadingCard />
+                    </div>
+                  )}
+                  {error && hasMore && (
+                    <div className="py-8 text-center">
+                      <p className="text-sm text-muted-foreground mb-4">{error}</p>
+                      <button
+                        onClick={retry}
+                        className="px-6 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors font-medium"
+                      >
+                        Retry
+                      </button>
+                    </div>
+                  )}
+                  {!hasMore && items.length > 0 && (
+                    <CaughtUpState
+                      lastUpdated={feedStartTime}
+                      onRefresh={() => {
+                        setFeedStartTime(new Date())
+                        scrollRestoration.clearSession()
+                        fetchNext(true)
+                      }}
+                    />
+                  )}
+                </>
+              ),
+            }}
+          />
         ) : (
-          // Feed with infinite scroll
+          // Regular feed for <500 items
           <div>
             {/* Feed items */}
             <div className="space-y-4">
@@ -130,17 +212,16 @@ export default function FeedPage() {
               </div>
             )}
 
-            {/* End of feed */}
+            {/* End of feed - Caught Up State */}
             {!hasMore && items.length > 0 && (
-              <div className="text-center py-8">
-                <p className="text-muted-foreground mb-4">You're all caught up! 🎉</p>
-                <button
-                  onClick={() => fetchNext(true)}
-                  className="px-6 py-2 bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/90 transition-colors font-medium"
-                >
-                  Refresh
-                </button>
-              </div>
+              <CaughtUpState
+                lastUpdated={feedStartTime}
+                onRefresh={() => {
+                  setFeedStartTime(new Date())
+                  scrollRestoration.clearSession()
+                  fetchNext(true)
+                }}
+              />
             )}
 
             {/* Sentinel for IntersectionObserver */}

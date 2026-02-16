@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from 'react'
 import type { TrendItem, Language } from '@/types/trend'
-import { formatRelativeTime, truncate, formatEngagement } from '@/lib/utils'
+import { formatRelativeTime, truncate, formatEngagement, getPlatformName, getBucketName, getRegionName } from '@/lib/utils'
 import { useCardTracking, useTracking } from '@/hooks/useTracking'
 
 interface FeedCardProps {
@@ -57,7 +57,7 @@ export function FeedCard({ item, language, onDismiss, onHidePlatform }: FeedCard
   return (
     <article
       ref={cardRef as React.RefObject<HTMLElement>}
-      className="relative border rounded-lg p-4 hover:shadow-md transition-shadow bg-card"
+      className="relative border rounded-lg p-5 hover:shadow-lg hover:border-primary/20 transition-all bg-card"
     >
       {/* Menu Button */}
       <div className="absolute top-4 right-4">
@@ -103,26 +103,43 @@ export function FeedCard({ item, language, onDismiss, onHidePlatform }: FeedCard
         target="_blank"
         rel="noopener noreferrer"
         onClick={handleClick}
-        className="block pr-8"
+        className="block pr-8 group"
       >
-        {/* Title */}
-        <h3 className="text-lg font-semibold mb-2 hover:text-primary transition-colors line-clamp-2">
+        {/* Source Badges */}
+        <div className="flex items-center gap-2 mb-2.5 flex-wrap">
+          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-primary/10 text-primary">
+            {getPlatformName(item.platform)}
+          </span>
+          {item.bucket && (
+            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-secondary text-secondary-foreground">
+              {getBucketName(item.bucket)}
+            </span>
+          )}
+          {item.region_key && item.region_key !== 'all' && (
+            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-muted text-muted-foreground">
+              {getRegionName(item.region_key)}
+            </span>
+          )}
+        </div>
+
+        {/* Title - Optimized for readability */}
+        <h3 className="text-xl font-bold mb-2.5 leading-snug group-hover:text-primary transition-colors line-clamp-3">
           {title}
         </h3>
 
-        {/* Description */}
+        {/* Description - More prominent for text-heavy cards */}
         {description && (
-          <p className="text-sm text-muted-foreground mb-3 line-clamp-3">
-            {truncate(description, 200)}
+          <p className="text-base text-foreground/80 mb-3 leading-relaxed line-clamp-4">
+            {description}
           </p>
         )}
 
-        {/* Metadata */}
-        <div className="flex items-center gap-3 text-xs text-muted-foreground">
-          <span>{timeAgo}</span>
+        {/* Metadata Footer */}
+        <div className="flex items-center gap-2.5 text-xs text-muted-foreground flex-wrap">
+          <span className="font-medium">{timeAgo}</span>
           {engagement && (
             <>
-              <span>•</span>
+              <span className="text-muted-foreground/50">•</span>
               <span>{engagement}</span>
             </>
           )}

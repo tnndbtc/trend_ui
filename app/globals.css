@@ -55,5 +55,41 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-feature-settings: 'kern' 1, 'liga' 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Optimize text rendering for readability */
+  h1, h2, h3, h4, h5, h6 {
+    text-rendering: optimizeLegibility;
+  }
+
+  p {
+    text-rendering: optimizeLegibility;
+  }
+}
+
+/* Custom utilities for feed layout */
+@layer utilities {
+  /* Ensure centered single-column layout on desktop */
+  .feed-container {
+    @apply container mx-auto px-4 py-6;
+    max-width: 760px;
+  }
+
+  /* Improved line clamping with better ellipsis */
+  .line-clamp-3 {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .line-clamp-4 {
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
   }
 }
