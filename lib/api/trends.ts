@@ -1,11 +1,11 @@
 import { get, post } from './client'
-import type { TrendsResponse, TrendItem, FeedbackAction, Region, Surface } from '@/types/trend'
+import type { TrendsResponse, TrendItem, FeedbackAction, Region, Surface, Language } from '@/types/trend'
 
 /**
  * Fetch trends with cursor-based pagination (no filters)
  * Pure "For You" feed style
  */
-export async function fetchTrends(options: { cursor?: string | null; limit?: number } = {}): Promise<TrendsResponse> {
+export async function fetchTrends(options: { cursor?: string | null; limit?: number; lang?: Language } = {}): Promise<TrendsResponse> {
   const params: Record<string, string | number | undefined> = {
     limit: options.limit || 50,
   }
@@ -13,6 +13,11 @@ export async function fetchTrends(options: { cursor?: string | null; limit?: num
   // Add cursor if present
   if (options.cursor) {
     params.cursor = options.cursor
+  }
+
+  // Always add language parameter - backend needs it to populate display_title/display_description
+  if (options.lang) {
+    params.lang = options.lang
   }
 
   try {
@@ -33,11 +38,16 @@ export async function fetchTrends(options: { cursor?: string | null; limit?: num
 /**
  * Fetch a single trend item by ID
  */
-export async function fetchTrendItem(id: number): Promise<TrendItem | null> {
+export async function fetchTrendItem(id: number, lang?: Language): Promise<TrendItem | null> {
   try {
     // The crawler API doesn't have a single-item endpoint yet
     // We'll fetch a large page and filter client-side as a temporary solution
-    const response = await get<TrendsResponse>('/trends', { limit: 200 })
+    const params: Record<string, string | number | undefined> = { limit: 200 }
+    // Always add language parameter - backend needs it to populate display_title/display_description
+    if (lang) {
+      params.lang = lang
+    }
+    const response = await get<TrendsResponse>('/trends', params)
     const item = response.items.find(item => item.id === id)
     return item || null
   } catch (error) {

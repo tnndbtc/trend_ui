@@ -1,10 +1,11 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
-import type { TrendItem } from '@/types/trend'
+import type { TrendItem, Language } from '@/types/trend'
 import { fetchTrends } from '@/lib/api/trends'
 
 interface UseTrendFeedOptions {
   dismissedItems?: Set<string>
   hiddenPlatforms?: Set<string>
+  language?: Language
 }
 
 interface UseTrendFeedReturn {
@@ -23,7 +24,8 @@ interface UseTrendFeedReturn {
  */
 export function useTrendFeed({
   dismissedItems = new Set(),
-  hiddenPlatforms = new Set()
+  hiddenPlatforms = new Set(),
+  language
 }: UseTrendFeedOptions = {}): UseTrendFeedReturn {
   const [allItems, setAllItems] = useState<TrendItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -75,10 +77,11 @@ export function useTrendFeed({
     }
 
     try {
-      console.log('[useTrendFeed] Fetching trends with cursor:', reset ? 'none (reset)' : nextCursor)
+      console.log('[useTrendFeed] Fetching trends with cursor:', reset ? 'none (reset)' : nextCursor, 'language:', language)
       const response = await fetchTrends({
         cursor: reset ? undefined : nextCursor,
         limit: 50,
+        lang: language,
       })
 
       console.log('[useTrendFeed] Received response:', {
@@ -113,7 +116,7 @@ export function useTrendFeed({
       setLoading(false)
       setLoadingMore(false)
     }
-  }, [hasMore, loadingMore, loading, nextCursor])
+  }, [hasMore, loadingMore, loading, nextCursor, language])
 
   const retry = useCallback(async () => {
     if (error && hasMore) {

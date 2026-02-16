@@ -18,29 +18,15 @@ export function FiltersBar({ language, onLanguageChange }: FiltersBarProps) {
         {/* App Title */}
         <h1 className="text-xl font-bold">For You</h1>
 
-        {/* Language Toggle */}
-        <div className="flex gap-2">
-          <button
-            onClick={() => onLanguageChange('original')}
-            className={`px-4 py-2 text-sm rounded-md transition-colors ${
-              language === 'original'
-                ? 'bg-primary text-primary-foreground'
-                : 'bg-secondary hover:bg-secondary/80'
-            }`}
-          >
-            Original
-          </button>
-          <button
-            onClick={() => onLanguageChange('en-US')}
-            className={`px-4 py-2 text-sm rounded-md transition-colors ${
-              language === 'en-US'
-                ? 'bg-primary text-primary-foreground'
-                : 'bg-secondary hover:bg-secondary/80'
-            }`}
-          >
-            English
-          </button>
-        </div>
+        {/* Language Dropdown */}
+        <select
+          value={language}
+          onChange={(e) => onLanguageChange(e.target.value as Language)}
+          className="px-4 py-2 text-sm rounded-md bg-secondary hover:bg-secondary/80 border border-border focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer transition-colors"
+        >
+          <option value="en-US">English</option>
+          <option value="zh-Hans">中文</option>
+        </select>
       </div>
     </div>
   )

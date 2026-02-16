@@ -19,6 +19,7 @@ export default function FeedPage() {
   const { items, loading, loadingMore, error, hasMore, fetchNext, retry } = useTrendFeed({
     dismissedItems,
     hiddenPlatforms,
+    language,
   })
 
   console.log('[FeedPage] Render state:', { itemsCount: items.length, loading, error })
@@ -26,17 +27,28 @@ export default function FeedPage() {
   // Ref for IntersectionObserver sentinel
   const sentinelRef = useRef<HTMLDivElement>(null)
   const initialFetchDone = useRef(false)
+  const prevLanguage = useRef<Language | null>(null)
 
   // Initial fetch on mount
   useEffect(() => {
     if (!initialFetchDone.current) {
       console.log('[FeedPage] useEffect running, calling fetchNext(true)')
       initialFetchDone.current = true
+      prevLanguage.current = language
       fetchNext(true)
     } else {
       console.log('[FeedPage] useEffect skipping - already fetched')
     }
   }, [fetchNext])
+
+  // Refetch when language changes (but not on initial mount)
+  useEffect(() => {
+    if (initialFetchDone.current && prevLanguage.current !== null && prevLanguage.current !== language) {
+      console.log('[FeedPage] Language changed from', prevLanguage.current, 'to', language, '- refetching')
+      prevLanguage.current = language
+      fetchNext(true)
+    }
+  }, [language, fetchNext])
 
   // Setup IntersectionObserver for infinite scroll
   useEffect(() => {

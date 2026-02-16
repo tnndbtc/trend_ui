@@ -16,9 +16,9 @@ export function FeedCard({ item, language, onDismiss, onHidePlatform }: FeedCard
   const [menuOpen, setMenuOpen] = useState(false)
   const { trackClick } = useTracking()
 
-  // Choose title and description based on language preference
-  const title = language === 'en-US' ? item.canonical_title : item.title_original
-  const description = language === 'en-US' ? item.canonical_description : item.description_original
+  // Use display_title and display_description from API (language-aware)
+  const title = item.display_title
+  const description = item.display_description
 
   const timeAgo = formatRelativeTime(item.published_at || item.collected_at)
   const engagement = formatEngagement(item.engagement_signals || {})

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import type { TrendItem } from '@/types/trend'
+import type { TrendItem, Language } from '@/types/trend'
 import { fetchTrendItem } from '@/lib/api/trends'
 import { formatRelativeTime, getPlatformName, getBucketName, formatEngagement } from '@/lib/utils'
 import { FeedbackButtons } from '@/components/FeedbackButtons'
@@ -14,16 +14,16 @@ export default function ItemDetailPage() {
 
   const [item, setItem] = useState<TrendItem | null>(null)
   const [isLoading, setIsLoading] = useState(true)
-  const [showOriginal, setShowOriginal] = useState(false)
+  const [language, setLanguage] = useState<Language>('en-US')
 
   useEffect(() => {
     loadItem()
-  }, [itemId])
+  }, [itemId, language])
 
   const loadItem = async () => {
     setIsLoading(true)
     try {
-      const data = await fetchTrendItem(itemId)
+      const data = await fetchTrendItem(itemId, language)
       setItem(data)
     } catch (error) {
       console.error('Failed to load item:', error)
@@ -98,27 +98,28 @@ export default function ItemDetailPage() {
           </span>
         </div>
 
-        {/* Language Toggle */}
-        {item.title_original !== item.canonical_title && (
-          <div className="mb-4">
-            <button
-              onClick={() => setShowOriginal(!showOriginal)}
-              className="text-sm text-primary hover:underline"
-            >
-              {showOriginal ? '🌐 Show English Translation' : '📝 Show Original Language'}
-            </button>
-          </div>
-        )}
+        {/* Language Dropdown */}
+        <div className="mb-4">
+          <label className="text-sm text-muted-foreground mr-2">Language:</label>
+          <select
+            value={language}
+            onChange={(e) => setLanguage(e.target.value as Language)}
+            className="px-3 py-1.5 text-sm rounded-md bg-secondary hover:bg-secondary/80 border border-border focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer transition-colors"
+          >
+            <option value="en-US">English</option>
+            <option value="zh-Hans">中文</option>
+          </select>
+        </div>
 
         {/* Title */}
         <h1 className="text-3xl font-bold mb-4">
-          {showOriginal ? item.title_original : item.canonical_title}
+          {item.display_title}
         </h1>
 
         {/* Description */}
-        {(showOriginal ? item.description_original : item.canonical_description) && (
+        {item.display_description && (
           <p className="text-lg text-muted-foreground mb-6 leading-relaxed">
-            {showOriginal ? item.description_original : item.canonical_description}
+            {item.display_description}
           </p>
         )}
 
@@ -150,10 +151,10 @@ export default function ItemDetailPage() {
           )}
         </div>
 
-        {/* Original Language Info */}
-        {showOriginal && (
+        {/* Language Info */}
+        {language === 'zh-Hans' && (
           <div className="mb-4 p-3 bg-muted rounded-md text-sm">
-            <strong>Original Language:</strong> {item.original_locale}
+            <strong>Translation:</strong> Simplified Chinese (zh-Hans)
           </div>
         )}
 

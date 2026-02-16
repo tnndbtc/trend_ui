@@ -10,6 +10,8 @@ export interface TrendItem {
   original_locale: string
   canonical_title: string
   canonical_description: string | null
+  display_title: string
+  display_description: string | null
   rank_position: number | null
   engagement_signals: Record<string, any>
   region_key: string
@@ -55,7 +57,7 @@ export interface Surface {
   last_error: string | null
 }
 
-export type Language = 'original' | 'en-US'
+export type Language = 'en-US' | 'zh-Hans'
 export type Bucket =
   | 'hot_now'
   | 'rising'
