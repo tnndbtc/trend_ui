@@ -1,117 +1,141 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import type { TrendItem, FeedFilters } from '@/types/trend'
-import { fetchTrends } from '@/lib/api/trends'
+import { useState, useEffect, useRef } from 'react'
+import type { Language } from '@/types/trend'
+import { useTrendFeed } from '@/hooks/useTrendFeed'
+import { useCardMenu } from '@/hooks/useCardMenu'
 import { FeedCard } from '@/components/FeedCard'
 import { FiltersBar } from '@/components/FiltersBar'
 import { LoadingCard } from '@/components/LoadingCard'
 import { EmptyState } from '@/components/EmptyState'
 
 export default function FeedPage() {
-  const [filters, setFilters] = useState<FeedFilters>({
-    language: 'en-US',
-    buckets: [],
-    surprise: false,
+  const [language, setLanguage] = useState<Language>('en-US')
+
+  // Menu actions (dismiss, hide source)
+  const { dismissedItems, hiddenPlatforms, dismissItem, hidePlatform } = useCardMenu()
+
+  // Feed data with client-side filtering
+  const { items, loading, loadingMore, error, hasMore, fetchNext, retry } = useTrendFeed({
+    dismissedItems,
+    hiddenPlatforms,
   })
 
-  const [items, setItems] = useState<TrendItem[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [isLoadingMore, setIsLoadingMore] = useState(false)
-  const [hasMore, setHasMore] = useState(true)
-  const [cursor, setCursor] = useState<string | null>(null)
+  console.log('[FeedPage] Render state:', { itemsCount: items.length, loading, error })
 
-  // Load initial data
+  // Ref for IntersectionObserver sentinel
+  const sentinelRef = useRef<HTMLDivElement>(null)
+  const initialFetchDone = useRef(false)
+
+  // Initial fetch on mount
   useEffect(() => {
-    loadTrends(true)
-  }, [filters.region, filters.buckets, filters.surprise])
-
-  const loadTrends = async (reset = false) => {
-    if (reset) {
-      setIsLoading(true)
-      setItems([])
-      setCursor(null)
+    if (!initialFetchDone.current) {
+      console.log('[FeedPage] useEffect running, calling fetchNext(true)')
+      initialFetchDone.current = true
+      fetchNext(true)
     } else {
-      setIsLoadingMore(true)
+      console.log('[FeedPage] useEffect skipping - already fetched')
     }
+  }, [fetchNext])
 
-    try {
-      const response = await fetchTrends({
-        ...filters,
-        limit: 20,
-        cursor: reset ? undefined : cursor || undefined,
-      })
+  // Setup IntersectionObserver for infinite scroll
+  useEffect(() => {
+    if (!sentinelRef.current) return
 
-      setItems(prev => reset ? response.items : [...prev, ...response.items])
-      setCursor(response.next_cursor || null)
-      setHasMore(!!response.next_cursor)
-    } catch (error) {
-      console.error('Failed to load trends:', error)
-    } finally {
-      setIsLoading(false)
-      setIsLoadingMore(false)
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const [entry] = entries
+        if (entry.isIntersecting && hasMore && !loadingMore && !loading) {
+          fetchNext(false)
+        }
+      },
+      {
+        root: null,
+        rootMargin: '100px',
+        threshold: 0.1,
+      }
+    )
+
+    observer.observe(sentinelRef.current)
+
+    return () => {
+      observer.disconnect()
     }
-  }
-
-  // Filter items client-side by search
-  const filteredItems = filters.search
-    ? items.filter(item => {
-        const searchLower = filters.search!.toLowerCase()
-        const title = (filters.language === 'en-US' ? item.canonical_title : item.title_original).toLowerCase()
-        return title.includes(searchLower)
-      })
-    : items
+  }, [hasMore, loadingMore, loading, fetchNext])
 
   return (
-    <div className="container mx-auto px-4 py-6 max-w-4xl">
-      {/* Filters */}
-      <FiltersBar filters={filters} onFiltersChange={setFilters} />
+    <div className="min-h-screen bg-background">
+      {/* Sticky Header */}
+      <div className="sticky top-0 z-50">
+        <FiltersBar language={language} onLanguageChange={setLanguage} />
+      </div>
 
       {/* Feed */}
-      <div className="mt-6 space-y-4">
-        {isLoading ? (
+      <div className="container mx-auto px-4 py-6 max-w-2xl">
+        {loading ? (
           // Loading skeleton
-          <>
+          <div className="space-y-4">
             <LoadingCard />
             <LoadingCard />
             <LoadingCard />
-          </>
-        ) : filteredItems.length === 0 ? (
+          </div>
+        ) : items.length === 0 ? (
           // Empty state
-          <EmptyState onRetry={() => loadTrends(true)} />
+          <EmptyState onRetry={() => fetchNext(true)} />
         ) : (
-          // Feed items
-          <>
-            {filteredItems.map(item => (
-              <FeedCard key={item.id} item={item} language={filters.language} />
-            ))}
+          // Feed with infinite scroll
+          <div>
+            {/* Feed items */}
+            <div className="space-y-4">
+              {items.map(item => (
+                <FeedCard
+                  key={item.id}
+                  item={item}
+                  language={language}
+                  onDismiss={dismissItem}
+                  onHidePlatform={hidePlatform}
+                />
+              ))}
+            </div>
 
-            {/* Load More Button */}
-            {hasMore && !isLoadingMore && (
-              <div className="flex justify-center py-6">
-                <button
-                  onClick={() => loadTrends(false)}
-                  className="px-6 py-3 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors font-medium"
-                >
-                  Load More
-                </button>
+            {/* Loading more indicator */}
+            {loadingMore && (
+              <div className="py-8">
+                <LoadingCard />
               </div>
             )}
 
-            {/* Loading more indicator */}
-            {isLoadingMore && (
-              <div className="flex justify-center py-6">
-                <div className="text-muted-foreground">Loading more...</div>
+            {/* Error state */}
+            {error && hasMore && (
+              <div className="py-8 text-center">
+                <p className="text-sm text-muted-foreground mb-4">{error}</p>
+                <button
+                  onClick={retry}
+                  className="px-6 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors font-medium"
+                >
+                  Retry
+                </button>
               </div>
             )}
 
             {/* End of feed */}
             {!hasMore && items.length > 0 && (
-              <div className="text-center py-6 text-muted-foreground">
-                You've reached the end! 🎉
+              <div className="text-center py-8">
+                <p className="text-muted-foreground mb-4">You're all caught up! 🎉</p>
+                <button
+                  onClick={() => fetchNext(true)}
+                  className="px-6 py-2 bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/90 transition-colors font-medium"
+                >
+                  Refresh
+                </button>
               </div>
             )}
-          </>
+
+            {/* Sentinel for IntersectionObserver */}
+            {hasMore && !loadingMore && !error && (
+              <div ref={sentinelRef} className="h-4" />
+            )}
+          </div>
         )}
       </div>
     </div>

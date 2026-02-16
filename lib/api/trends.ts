@@ -1,47 +1,31 @@
 import { get, post } from './client'
-import type { TrendsResponse, TrendItem, FeedbackAction, FeedFilters } from '@/types/trend'
+import type { TrendsResponse, TrendItem, FeedbackAction, Region, Surface } from '@/types/trend'
 
 /**
- * Fetch trends with filters
+ * Fetch trends with cursor-based pagination (no filters)
+ * Pure "For You" feed style
  */
-export async function fetchTrends(filters: Partial<FeedFilters> & { limit?: number; cursor?: string }): Promise<TrendsResponse> {
+export async function fetchTrends(options: { cursor?: string | null; limit?: number } = {}): Promise<TrendsResponse> {
   const params: Record<string, string | number | undefined> = {
-    limit: filters.limit || 20,
+    limit: options.limit || 50,
   }
 
-  // Add optional filters
-  if (filters.region && filters.region !== 'all') {
-    params.region = filters.region
-  }
-
-  if (filters.buckets && filters.buckets.length > 0) {
-    params.bucket = filters.buckets.join(',')
-  }
-
-  if (filters.cursor) {
-    params.cursor = filters.cursor
-  }
-
-  if (filters.surprise) {
-    params.surprise = 1
+  // Add cursor if present
+  if (options.cursor) {
+    params.cursor = options.cursor
   }
 
   try {
-    // The crawler API endpoint
-    const data = await get<TrendItem[]>('/trends', params)
-
-    // The current API returns an array directly, not { items, next_cursor }
-    // We'll adapt to this format
-    return {
-      items: data,
-      next_cursor: null, // Pagination not yet implemented in crawler API
-    }
+    // The crawler API now returns cursor-based envelope
+    const data = await get<TrendsResponse>('/trends', params)
+    return data
   } catch (error) {
     console.error('Failed to fetch trends:', error)
     // Return empty result on error instead of throwing
     return {
       items: [],
       next_cursor: null,
+      has_more: false,
     }
   }
 }
@@ -52,13 +36,46 @@ export async function fetchTrends(filters: Partial<FeedFilters> & { limit?: numb
 export async function fetchTrendItem(id: number): Promise<TrendItem | null> {
   try {
     // The crawler API doesn't have a single-item endpoint yet
-    // We'll fetch all and filter client-side as a temporary solution
-    const response = await get<TrendItem[]>('/trends', { limit: 500 })
-    const item = response.find(item => item.id === id)
+    // We'll fetch a large page and filter client-side as a temporary solution
+    const response = await get<TrendsResponse>('/trends', { limit: 200 })
+    const item = response.items.find(item => item.id === id)
     return item || null
   } catch (error) {
     console.error(`Failed to fetch trend item ${id}:`, error)
     return null
+  }
+}
+
+/**
+ * Fetch available regions
+ */
+export async function fetchRegions(enabledOnly = true): Promise<Region[]> {
+  try {
+    const params = enabledOnly ? { enabled_only: true } : {}
+    const data = await get<Region[]>('/regions', params)
+    return data
+  } catch (error) {
+    console.error('Failed to fetch regions:', error)
+    return []
+  }
+}
+
+/**
+ * Fetch surfaces (trend sources)
+ */
+export async function fetchSurfaces(enabledOnly = true, region?: string): Promise<Surface[]> {
+  try {
+    const params: Record<string, string | number | boolean | undefined> = {
+      enabled_only: enabledOnly,
+    }
+    if (region) {
+      params.region = region
+    }
+    const data = await get<Surface[]>('/surfaces', params)
+    return data
+  } catch (error) {
+    console.error('Failed to fetch surfaces:', error)
+    return []
   }
 }
 

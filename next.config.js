@@ -1,6 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  basePath: '/app', // Serve under /app path through nginx gateway
   images: {
     domains: [],
   },

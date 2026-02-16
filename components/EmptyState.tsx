@@ -5,10 +5,10 @@ interface EmptyStateProps {
 export function EmptyState({ onRetry }: EmptyStateProps) {
   return (
     <div className="flex flex-col items-center justify-center py-12 text-center">
-      <div className="text-6xl mb-4">🔍</div>
-      <h3 className="text-xl font-semibold mb-2">No trends found</h3>
+      <div className="text-6xl mb-4">🌟</div>
+      <h3 className="text-xl font-semibold mb-2">No trends available</h3>
       <p className="text-muted-foreground mb-4 max-w-md">
-        We couldn't find any trends matching your filters. Try adjusting your selection or check back later.
+        We couldn't load any trends right now. Please check your connection or try again.
       </p>
       {onRetry && (
         <button

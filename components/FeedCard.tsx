@@ -1,83 +1,133 @@
 'use client'
 
-import Link from 'next/link'
-import type { TrendItem } from '@/types/trend'
-import type { Language } from '@/types/trend'
-import { formatRelativeTime, truncate, getPlatformName, getBucketName, formatEngagement } from '@/lib/utils'
-import { FeedbackButtons } from './FeedbackButtons'
+import { useState, useCallback } from 'react'
+import type { TrendItem, Language } from '@/types/trend'
+import { formatRelativeTime, truncate, formatEngagement } from '@/lib/utils'
+import { useCardTracking, useTracking } from '@/hooks/useTracking'
 
 interface FeedCardProps {
   item: TrendItem
   language: Language
+  onDismiss?: (itemId: string) => void
+  onHidePlatform?: (platform: string) => void
 }
 
-export function FeedCard({ item, language }: FeedCardProps) {
+export function FeedCard({ item, language, onDismiss, onHidePlatform }: FeedCardProps) {
+  const [menuOpen, setMenuOpen] = useState(false)
+  const { trackClick } = useTracking()
+
   // Choose title and description based on language preference
   const title = language === 'en-US' ? item.canonical_title : item.title_original
   const description = language === 'en-US' ? item.canonical_description : item.description_original
 
-  const platform = getPlatformName(item.platform)
-  const bucket = getBucketName(item.bucket)
   const timeAgo = formatRelativeTime(item.published_at || item.collected_at)
   const engagement = formatEngagement(item.engagement_signals || {})
 
+  // Track impression and dwell time
+  const cardRef = useCardTracking(
+    item.id.toString(),
+    item.platform,
+    true
+  )
+
+  const handleClick = useCallback(() => {
+    trackClick(item.id.toString(), item.url, item.platform)
+  }, [item.id, item.url, item.platform, trackClick])
+
+  const handleDismiss = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setMenuOpen(false)
+    onDismiss?.(item.id.toString())
+  }, [item.id, onDismiss])
+
+  const handleHidePlatform = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setMenuOpen(false)
+    onHidePlatform?.(item.platform)
+  }, [item.platform, onHidePlatform])
+
+  const toggleMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setMenuOpen(!menuOpen)
+  }, [menuOpen])
+
   return (
-    <div className="border rounded-lg p-4 hover:shadow-md transition-shadow bg-card">
-      {/* Badges */}
-      <div className="flex gap-2 mb-3 flex-wrap">
-        <span className="px-2 py-1 text-xs rounded-md bg-primary/10 text-primary font-medium">
-          {platform}
-        </span>
-        <span className="px-2 py-1 text-xs rounded-md bg-secondary text-secondary-foreground">
-          {bucket}
-        </span>
-        {item.rank_position && (
-          <span className="px-2 py-1 text-xs rounded-md bg-accent text-accent-foreground">
-            #{item.rank_position}
-          </span>
-        )}
-        <span className="px-2 py-1 text-xs rounded-md bg-muted text-muted-foreground">
-          {item.region_key.toUpperCase()}
-        </span>
-      </div>
+    <article
+      ref={cardRef as React.RefObject<HTMLElement>}
+      className="relative border rounded-lg p-4 hover:shadow-md transition-shadow bg-card"
+    >
+      {/* Menu Button */}
+      <div className="absolute top-4 right-4">
+        <button
+          onClick={toggleMenu}
+          className="p-2 hover:bg-secondary rounded-md transition-colors"
+          aria-label="Menu"
+        >
+          <span className="text-lg leading-none">⋯</span>
+        </button>
 
-      {/* Title */}
-      <Link href={`/item/${item.id}`}>
-        <h3 className="text-lg font-semibold mb-2 hover:text-primary transition-colors line-clamp-2">
-          {title}
-        </h3>
-      </Link>
-
-      {/* Description */}
-      {description && (
-        <p className="text-sm text-muted-foreground mb-3 line-clamp-3">
-          {truncate(description, 200)}
-        </p>
-      )}
-
-      {/* Metadata */}
-      <div className="flex items-center gap-3 text-xs text-muted-foreground mb-3">
-        <span>{timeAgo}</span>
-        {engagement && (
+        {/* Dropdown Menu */}
+        {menuOpen && (
           <>
-            <span>•</span>
-            <span>{engagement}</span>
+            {/* Backdrop */}
+            <div
+              className="fixed inset-0 z-10"
+              onClick={() => setMenuOpen(false)}
+            />
+
+            {/* Menu */}
+            <div className="absolute right-0 top-full mt-1 w-48 bg-card border rounded-md shadow-lg z-20">
+              <button
+                onClick={handleDismiss}
+                className="w-full text-left px-4 py-2 hover:bg-secondary text-sm transition-colors"
+              >
+                Not interested
+              </button>
+              <button
+                onClick={handleHidePlatform}
+                className="w-full text-left px-4 py-2 hover:bg-secondary text-sm transition-colors border-t"
+              >
+                Hide source ({item.platform})
+              </button>
+            </div>
           </>
         )}
       </div>
 
-      {/* Actions */}
-      <div className="flex items-center justify-between">
-        <FeedbackButtons itemId={item.id} />
-        <a
-          href={item.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-sm text-primary hover:underline"
-        >
-          View Source →
-        </a>
-      </div>
-    </div>
+      {/* Clickable Card Content */}
+      <a
+        href={item.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={handleClick}
+        className="block pr-8"
+      >
+        {/* Title */}
+        <h3 className="text-lg font-semibold mb-2 hover:text-primary transition-colors line-clamp-2">
+          {title}
+        </h3>
+
+        {/* Description */}
+        {description && (
+          <p className="text-sm text-muted-foreground mb-3 line-clamp-3">
+            {truncate(description, 200)}
+          </p>
+        )}
+
+        {/* Metadata */}
+        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+          <span>{timeAgo}</span>
+          {engagement && (
+            <>
+              <span>•</span>
+              <span>{engagement}</span>
+            </>
+          )}
+        </div>
+      </a>
+    </article>
   )
 }

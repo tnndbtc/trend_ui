@@ -24,7 +24,8 @@ export interface TrendItem {
 
 export interface TrendsResponse {
   items: TrendItem[]
-  next_cursor?: string | null
+  next_cursor: string | null
+  has_more: boolean
 }
 
 export interface FeedbackAction {
@@ -32,7 +33,28 @@ export interface FeedbackAction {
   action: 'like' | 'dislike' | 'save' | 'hide'
 }
 
-export type Region = 'us' | 'jp' | 'kr' | 'cn' | 'all'
+export interface Region {
+  key: string
+  name: string
+  default_locale: string
+  enabled: boolean
+}
+
+export interface Surface {
+  id: number
+  region_key: string
+  key: string
+  platform: string
+  surface_type: string
+  bucket: string
+  bucket_weight: number
+  enabled: boolean
+  poll_interval_seconds: number
+  last_run_at: string | null
+  last_success_at: string | null
+  last_error: string | null
+}
+
 export type Language = 'original' | 'en-US'
 export type Bucket =
   | 'hot_now'
@@ -49,7 +71,7 @@ export type Bucket =
   | 'evergreen'
 
 export interface FeedFilters {
-  region?: Region
+  region?: string
   language: Language
   buckets: Bucket[]
   surprise: boolean
