@@ -14,6 +14,7 @@ export interface TrendItem {
   display_description: string | null
   rank_position: number | null
   engagement_signals: Record<string, any>
+  thumbnail_url: string | null
   region_key: string
   translations?: {
     [locale: string]: {

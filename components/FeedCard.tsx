@@ -122,6 +122,19 @@ export function FeedCard({ item, language, onDismiss, onHidePlatform }: FeedCard
           )}
         </div>
 
+        {/* Thumbnail Image */}
+        {item.thumbnail_url && (
+          <div className="mb-3 rounded-md overflow-hidden">
+            <img
+              src={item.thumbnail_url}
+              alt={title}
+              className="w-full max-h-52 object-cover"
+              loading="lazy"
+              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+            />
+          </div>
+        )}
+
         {/* Title - Optimized for readability */}
         <h3 className="text-xl font-bold mb-2.5 leading-snug group-hover:text-primary transition-colors line-clamp-3">
           {title}
