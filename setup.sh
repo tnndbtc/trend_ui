@@ -105,7 +105,16 @@ show_access_urls() {
         print_info "Use Option 1 to setup and start the service"
     fi
 
+    echo -e "${YELLOW}  0)${NC} Go back"
     echo ""
+
+    while true; do
+        read -p "Enter 0 to go back: " url_choice
+        if [ "$url_choice" = "0" ]; then
+            return 0
+        fi
+        print_warning "Invalid option. Press 0 to go back."
+    done
 }
 
 # Check prerequisites
@@ -199,7 +208,7 @@ EOF
 install_dependencies() {
     echo -e "${BOLD}Installing dependencies...${NC}\n"
 
-    if [ -d "node_modules" ]; then
+    if [ -d "node_modules" ] && [ -f "node_modules/.bin/next" ]; then
         print_success "Dependencies already installed - skipping"
         print_info "To reinstall, run: npm install"
         echo ""
@@ -265,7 +274,8 @@ setup_environment() {
 
                 echo ""
                 print_info "Starting development server in background..."
-                npm run dev > /tmp/trend-ui-dev.log 2>&1 &
+                nohup npm run dev > /tmp/trend-ui-dev.log 2>&1 &
+                disown
                 sleep 3
 
                 # Check if started successfully
@@ -279,7 +289,17 @@ setup_environment() {
                     print_error "Failed to start development server"
                     echo "Check logs: tail -f /tmp/trend-ui-dev.log"
                 fi
+
                 echo ""
+                echo -e "${YELLOW}  0)${NC} Go back to main menu"
+                echo ""
+                while true; do
+                    read -p "Enter 0 to go back: " dev_choice
+                    if [ "$dev_choice" = "0" ]; then
+                        return 0
+                    fi
+                    print_warning "Invalid option. Press 0 to go back."
+                done
                 ;;
             2)
                 # Kill any existing services before starting
@@ -302,12 +322,14 @@ setup_environment() {
 
                 echo ""
                 print_info "Building production build..."
-                npm run build
+                local api_url=$(grep NEXT_PUBLIC_CRAWLER_API_BASE_URL .env.local 2>/dev/null | cut -d= -f2-)
+                NEXT_PUBLIC_CRAWLER_API_BASE_URL="${api_url}" npm run build
 
                 if [ $? -eq 0 ]; then
                     echo ""
                     print_info "Starting production server in background..."
-                    npm start > /tmp/trend-ui-prod.log 2>&1 &
+                    nohup npm start > /tmp/trend-ui-prod.log 2>&1 &
+                    disown
                     sleep 3
 
                     # Check if started successfully
@@ -324,7 +346,17 @@ setup_environment() {
                 else
                     print_error "Build failed. Cannot start production server."
                 fi
+
                 echo ""
+                echo -e "${YELLOW}  0)${NC} Go back to main menu"
+                echo ""
+                while true; do
+                    read -p "Enter 0 to go back: " prod_choice
+                    if [ "$prod_choice" = "0" ]; then
+                        return 0
+                    fi
+                    print_warning "Invalid option. Press 0 to go back."
+                done
                 ;;
             3)
                 if ! command -v docker &> /dev/null; then
@@ -367,7 +399,17 @@ setup_environment() {
                     print_error "Failed to start docker container"
                     echo "Check logs: docker-compose logs"
                 fi
+
                 echo ""
+                echo -e "${YELLOW}  0)${NC} Go back to main menu"
+                echo ""
+                while true; do
+                    read -p "Enter 0 to go back: " docker_choice
+                    if [ "$docker_choice" = "0" ]; then
+                        return 0
+                    fi
+                    print_warning "Invalid option. Press 0 to go back."
+                done
                 ;;
             0)
                 print_info "Returning to main menu..."
@@ -423,7 +465,15 @@ view_logs() {
     if [ "$has_dev" = false ] && [ "$has_prod" = false ] && [ "$has_docker" = false ]; then
         print_info "No services are currently running"
         echo ""
-        return 0
+        echo -e "  ${YELLOW}0)${NC} Go back"
+        echo ""
+        while true; do
+            read -p "Enter 0 to go back: " log_back
+            if [ "$log_back" = "0" ]; then
+                return 0
+            fi
+            print_warning "Invalid option. Press 0 to go back."
+        done
     fi
 
     echo -e "  ${YELLOW}0)${NC} Go back"
@@ -531,6 +581,16 @@ check_status() {
     fi
 
     echo ""
+    echo -e "${YELLOW}  0)${NC} Go back"
+    echo ""
+
+    while true; do
+        read -p "Enter 0 to go back: " status_choice
+        if [ "$status_choice" = "0" ]; then
+            return 0
+        fi
+        print_warning "Invalid option. Press 0 to go back."
+    done
 }
 
 # Stop all services
@@ -605,6 +665,16 @@ stop_services() {
     fi
 
     echo ""
+    echo -e "${YELLOW}  0)${NC} Go back"
+    echo ""
+
+    while true; do
+        read -p "Enter 0 to go back: " stop_choice
+        if [ "$stop_choice" = "0" ]; then
+            return 0
+        fi
+        print_warning "Invalid option. Press 0 to go back."
+    done
 }
 
 # Main loop
@@ -620,19 +690,15 @@ main() {
                 ;;
             2)
                 show_access_urls
-                sleep 2
                 ;;
             3)
                 check_status
-                sleep 2
                 ;;
             4)
                 view_logs
-                sleep 1
                 ;;
             5)
                 stop_services
-                sleep 1
                 ;;
             0)
                 echo ""
