@@ -17,12 +17,19 @@ function extractBvid(url: string): string | null {
   return match ? match[1] : null
 }
 
+function extractYoutubeId(url: string): string | null {
+  // Handles: youtube.com/watch?v=ID, youtu.be/ID, youtube.com/shorts/ID
+  const match = url.match(/(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/)
+  return match ? match[1] : null
+}
+
 export function FeedCard({ item, language, onDismiss, onHidePlatform }: FeedCardProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [playing, setPlaying] = useState(false)
   const { trackClick } = useTracking()
 
   const bvid = item.platform === 'bilibili' ? extractBvid(item.url) : null
+  const ytid = item.platform === 'youtube' ? extractYoutubeId(item.url) : null
 
   // Use display_title and display_description from API (language-aware)
   const title = item.display_title
@@ -141,6 +148,43 @@ export function FeedCard({ item, language, onDismiss, onHidePlatform }: FeedCard
         </div>
       )}
 
+      {/* YouTube inline player — outside <a> so iframe is valid HTML */}
+      {item.platform === 'youtube' && ytid && item.thumbnail_url && (
+        <div className="mb-3 rounded-md overflow-hidden relative" style={{ aspectRatio: '16/9' }}>
+          {playing ? (
+            <iframe
+              src={`https://www.youtube.com/embed/${ytid}?autoplay=1`}
+              className="w-full h-full"
+              allowFullScreen
+              allow="autoplay; fullscreen"
+              style={{ border: 'none' }}
+            />
+          ) : (
+            <>
+              <img
+                src={item.thumbnail_url}
+                alt={title ?? ''}
+                className="w-full h-full object-cover"
+                loading="lazy"
+                referrerPolicy="no-referrer"
+                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+              />
+              <button
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); setPlaying(true) }}
+                className="absolute inset-0 flex items-center justify-center bg-black/20 hover:bg-black/30 transition-colors group/play"
+                aria-label="Play YouTube video"
+              >
+                <div className="w-16 h-16 rounded-full bg-white/90 flex items-center justify-center shadow-lg group-hover/play:scale-110 transition-transform">
+                  <svg className="w-8 h-8 ml-1" style={{ color: '#FF0000' }} viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M8 5v14l11-7z"/>
+                  </svg>
+                </div>
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
       {/* Clickable Card Content */}
       <a
         href={item.url}
@@ -166,8 +210,8 @@ export function FeedCard({ item, language, onDismiss, onHidePlatform }: FeedCard
           )}
         </div>
 
-        {/* Thumbnail for non-Bilibili platforms */}
-        {item.thumbnail_url && item.platform !== 'bilibili' && (
+        {/* Thumbnail for non-Bilibili, non-YouTube platforms */}
+        {item.thumbnail_url && item.platform !== 'bilibili' && item.platform !== 'youtube' && (
           <div className="mb-3 rounded-md overflow-hidden">
             <img
               src={item.thumbnail_url}
