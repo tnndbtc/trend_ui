@@ -14,7 +14,7 @@ export default function ItemDetailPage() {
 
   const [item, setItem] = useState<TrendItem | null>(null)
   const [isLoading, setIsLoading] = useState(true)
-  const [language, setLanguage] = useState<Language>('en-US')
+  const [language, setLanguage] = useState<Language>('zh-Hans')
 
   useEffect(() => {
     loadItem()
@@ -106,7 +106,6 @@ export default function ItemDetailPage() {
             onChange={(e) => setLanguage(e.target.value as Language)}
             className="px-3 py-1.5 text-sm rounded-md bg-secondary hover:bg-secondary/80 border border-border focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer transition-colors"
           >
-            <option value="en-US">English</option>
             <option value="zh-Hans">中文</option>
           </select>
         </div>
@@ -151,11 +150,31 @@ export default function ItemDetailPage() {
           )}
         </div>
 
-        {/* Language Info */}
-        {language === 'zh-Hans' && (
-          <div className="mb-4 p-3 bg-muted rounded-md text-sm">
-            <strong>Translation:</strong> Simplified Chinese (zh-Hans)
-          </div>
+        {/* English Original - collapsible */}
+        {language === 'zh-Hans' && (item.translations?.['en-US'] || item.original_locale === 'en-US') && (
+          <details className="mb-4 group">
+            <summary className="cursor-pointer text-sm text-muted-foreground hover:text-foreground select-none list-none flex items-center gap-1.5 w-fit">
+              <span className="inline-block transition-transform group-open:rotate-90">▶</span>
+              English original
+            </summary>
+            <div className="mt-2 p-3 bg-muted rounded-md text-sm text-muted-foreground space-y-1">
+              {item.translations?.['en-US']?.title ? (
+                <>
+                  <p className="font-medium text-foreground">{item.translations['en-US'].title}</p>
+                  {item.translations['en-US'].description && (
+                    <p className="leading-relaxed">{item.translations['en-US'].description}</p>
+                  )}
+                </>
+              ) : item.original_locale === 'en-US' ? (
+                <>
+                  <p className="font-medium text-foreground">{item.canonical_title}</p>
+                  {item.canonical_description && (
+                    <p className="leading-relaxed">{item.canonical_description}</p>
+                  )}
+                </>
+              ) : null}
+            </div>
+          </details>
         )}
 
         {/* Actions */}

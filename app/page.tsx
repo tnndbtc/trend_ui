@@ -16,7 +16,7 @@ import { CaughtUpState } from '@/components/CaughtUpState'
 const VIRTUALIZATION_THRESHOLD = 500
 
 export default function FeedPage() {
-  const [language, setLanguage] = useState<Language>('en-US')
+  const [language, setLanguage] = useState<Language>('zh-Hans')
   const [feedStartTime, setFeedStartTime] = useState<Date>(new Date())
 
   // Menu actions (dismiss, hide source)
