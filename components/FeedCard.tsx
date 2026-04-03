@@ -12,9 +12,17 @@ interface FeedCardProps {
   onHidePlatform?: (platform: string) => void
 }
 
+function extractBvid(url: string): string | null {
+  const match = url.match(/\/video\/(BV[a-zA-Z0-9]+)/)
+  return match ? match[1] : null
+}
+
 export function FeedCard({ item, language, onDismiss, onHidePlatform }: FeedCardProps) {
   const [menuOpen, setMenuOpen] = useState(false)
+  const [playing, setPlaying] = useState(false)
   const { trackClick } = useTracking()
+
+  const bvid = item.platform === 'bilibili' ? extractBvid(item.url) : null
 
   // Use display_title and display_description from API (language-aware)
   const title = item.display_title
@@ -97,6 +105,42 @@ export function FeedCard({ item, language, onDismiss, onHidePlatform }: FeedCard
         )}
       </div>
 
+      {/* Bilibili inline player — outside <a> so iframe is valid HTML */}
+      {item.platform === 'bilibili' && bvid && item.thumbnail_url && (
+        <div className="mb-3 rounded-md overflow-hidden relative" style={{ aspectRatio: '16/9' }}>
+          {playing ? (
+            <iframe
+              src={`https://player.bilibili.com/player.html?bvid=${bvid}&autoplay=1&high_quality=1&danmaku=0`}
+              className="w-full h-full"
+              allowFullScreen
+              allow="autoplay; fullscreen"
+              style={{ border: 'none' }}
+            />
+          ) : (
+            <>
+              <img
+                src={item.thumbnail_url}
+                alt={title ?? ''}
+                className="w-full h-full object-cover"
+                referrerPolicy="no-referrer"
+                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+              />
+              <button
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); setPlaying(true) }}
+                className="absolute inset-0 flex items-center justify-center bg-black/20 hover:bg-black/30 transition-colors group/play"
+                aria-label="Play Bilibili video"
+              >
+                <div className="w-16 h-16 rounded-full bg-white/90 flex items-center justify-center shadow-lg group-hover/play:scale-110 transition-transform">
+                  <svg className="w-8 h-8 ml-1" style={{ color: '#00a1d6' }} viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M8 5v14l11-7z"/>
+                  </svg>
+                </div>
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
       {/* Clickable Card Content */}
       <a
         href={item.url}
@@ -122,14 +166,15 @@ export function FeedCard({ item, language, onDismiss, onHidePlatform }: FeedCard
           )}
         </div>
 
-        {/* Thumbnail Image */}
-        {item.thumbnail_url && (
+        {/* Thumbnail for non-Bilibili platforms */}
+        {item.thumbnail_url && item.platform !== 'bilibili' && (
           <div className="mb-3 rounded-md overflow-hidden">
             <img
               src={item.thumbnail_url}
-              alt={title}
+              alt={title ?? ''}
               className="w-full max-h-52 object-cover"
               loading="lazy"
+              referrerPolicy="no-referrer"
               onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
             />
           </div>
