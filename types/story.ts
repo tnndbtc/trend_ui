@@ -23,16 +23,7 @@ export interface Script {
   full_text: string
 }
 
-export type FormatType =
-  | 'explainer'
-  | 'top5'
-  | 'radar'
-  | 'regional'
-  | 'two_takes'
-  | 'pattern'
-  | 'viral'
-  | 'deep_dive'
-  | 'niche'
+export type FormatType = string  // 'explainer', 'top5', ..., 'format_10', ..., 'format_46'
 
 export type StoryLang = 'en' | 'zh'
 export type StoryStatus = 'generating' | 'ready' | 'failed'

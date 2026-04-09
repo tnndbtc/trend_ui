@@ -8,7 +8,7 @@ interface StoryCardProps {
   defaultExpanded?: boolean
 }
 
-const FORMAT_LABELS: Record<FormatType, string> = {
+const FORMAT_LABELS: Record<string, string> = {
   explainer: '60秒解读',
   top5: '今日热点5',
   radar: '全球雷达',
@@ -18,9 +18,46 @@ const FORMAT_LABELS: Record<FormatType, string> = {
   viral: '即将爆火',
   deep_dive: '深度报道',
   niche: '专题聚焦',
+  format_10: '反直觉',
+  format_11: '角色代入',
+  format_12: '时间线复盘',
+  format_13: '谁赢谁输',
+  format_14: '关键数据',
+  format_15: '谣言vs真相',
+  format_16: '被忽视但重要',
+  format_17: '背景补课',
+  format_18: '二选一',
+  format_19: '未来会怎样',
+  format_20: '一句话总结',
+  format_21: '最离谱新闻',
+  format_22: '同类对比',
+  format_23: '排行榜',
+  format_24: '错误决策',
+  format_25: '连锁反应',
+  format_26: '情绪解读',
+  format_27: '第一视角',
+  format_28: '极端假设',
+  format_29: '一分钟故事',
+  format_30: '黑白对立',
+  format_31: '评论精选',
+  format_32: '误判合集',
+  format_33: '关键词拆解',
+  format_34: '24小时回顾',
+  format_35: '标题对比',
+  format_36: '冷知识',
+  format_37: '幕后逻辑',
+  format_38: '失败案例',
+  format_39: '成功路径',
+  format_40: '三点结论',
+  format_41: '你需要知道的',
+  format_42: '误区提醒',
+  format_43: '对普通人',
+  format_44: '短问短答',
+  format_45: '概念解释',
+  format_46: '历史对照',
 }
 
-const FORMAT_COLORS: Record<FormatType, string> = {
+const FORMAT_COLORS: Record<string, string> = {
   explainer: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
   top5: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
   radar: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',

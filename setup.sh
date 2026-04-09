@@ -16,6 +16,7 @@ NC='\033[0m' # No Color
 BOLD='\033[1m'
 
 # Configuration
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP_PORT=3000
 APP_NAME="Trend UI"
 
@@ -74,7 +75,6 @@ get_local_ip() {
 
 # Show access URLs
 show_access_urls() {
-    clear
     print_header
     echo -e "${BOLD}Access URLs:${NC}\n"
 
@@ -223,7 +223,6 @@ install_dependencies() {
 
 # Setup and run
 setup_environment() {
-    clear
     print_header
     echo -e "${BOLD}Environment Setup${NC}\n"
 
@@ -241,192 +240,47 @@ setup_environment() {
     print_success "Environment setup complete!"
     echo ""
 
-    # Loop to allow multiple run attempts
-    while true; do
-        # Ask how to run
-        echo -e "${BOLD}How would you like to run the application?${NC}\n"
-        echo "  1) npm run dev (Development mode - background)"
-        echo "  2) npm run build && npm start (Production mode - background)"
-        echo "  3) docker-compose up (Docker - background)"
-        echo "  0) Go back"
+    # Kill any existing services before starting
+    if pgrep -f "next dev|next start|next-server" > /dev/null || lsof -ti :${APP_PORT} > /dev/null 2>&1; then
+        print_warning "Stopping existing services first..."
+        pkill -9 -f "next dev" 2>/dev/null || true
+        pkill -9 -f "next start" 2>/dev/null || true
+        pkill -9 -f "next-server" 2>/dev/null || true
+        lsof -ti :${APP_PORT} | xargs kill -9 2>/dev/null || true
+        sleep 1
+        print_success "Existing services stopped"
+    fi
+
+    # Stop any running docker container
+    if command -v docker &> /dev/null && docker ps | grep -q "trend-ui"; then
+        print_info "Stopping Docker container..."
+        docker-compose down 2>/dev/null || docker stop trend-ui 2>/dev/null || true
+        sleep 1
+    fi
+
+    echo ""
+    print_info "Starting development server in background..."
+    mkdir -p "${SCRIPT_DIR}/logs"
+    echo "[$(date -u '+%Y-%m-%d %H:%M:%S UTC')] === Starting trend_ui dev server ===" >> "${SCRIPT_DIR}/logs/dev.log"
+    nohup npm run dev >> "${SCRIPT_DIR}/logs/dev.log" 2>&1 &
+    disown
+    sleep 3
+
+    # Check if started successfully
+    if pgrep -f "next dev" > /dev/null; then
+        print_success "Development server started!"
+        echo -e "${CYAN}  → http://localhost:${APP_PORT}${NC}"
+        echo -e "${CYAN}  → Logs: ${SCRIPT_DIR}/logs/dev.log${NC}"
         echo ""
-        read -p "Select option [0-3]: " run_option
-
-        case $run_option in
-            1)
-                # Kill any existing services before starting
-                if pgrep -f "next dev\|next start\|next-server" > /dev/null || lsof -ti :${APP_PORT} > /dev/null 2>&1; then
-                    print_warning "Stopping existing services first..."
-                    pkill -9 -f "next dev" 2>/dev/null || true
-                    pkill -9 -f "next start" 2>/dev/null || true
-                    pkill -9 -f "next-server" 2>/dev/null || true
-                    lsof -ti :${APP_PORT} | xargs kill -9 2>/dev/null || true
-                    sleep 1
-                    print_success "Existing services stopped"
-                fi
-
-                # Stop any running docker container
-                if command -v docker &> /dev/null && docker ps | grep -q "trend-ui"; then
-                    print_info "Stopping Docker container..."
-                    docker-compose down 2>/dev/null || docker stop trend-ui 2>/dev/null || true
-                    sleep 1
-                fi
-
-                echo ""
-                print_info "Starting development server in background..."
-                nohup npm run dev > /tmp/trend-ui-dev.log 2>&1 &
-                disown
-                sleep 3
-
-                # Check if started successfully
-                if pgrep -f "next dev" > /dev/null; then
-                    print_success "Development server started!"
-                    echo -e "${CYAN}  → http://localhost:${APP_PORT}${NC}"
-                    echo -e "${CYAN}  → Logs: /tmp/trend-ui-dev.log${NC}"
-                    echo ""
-                    print_info "Use Option 3 (Check status) or Option 5 (Stop services) from main menu"
-                else
-                    print_error "Failed to start development server"
-                    echo "Check logs: tail -f /tmp/trend-ui-dev.log"
-                fi
-
-                echo ""
-                echo -e "${YELLOW}  0)${NC} Go back to main menu"
-                echo ""
-                while true; do
-                    read -p "Enter 0 to go back: " dev_choice
-                    if [ "$dev_choice" = "0" ]; then
-                        return 0
-                    fi
-                    print_warning "Invalid option. Press 0 to go back."
-                done
-                ;;
-            2)
-                # Kill any existing services before starting
-                if pgrep -f "next dev\|next start\|next-server" > /dev/null || lsof -ti :${APP_PORT} > /dev/null 2>&1; then
-                    print_warning "Stopping existing services first..."
-                    pkill -9 -f "next dev" 2>/dev/null || true
-                    pkill -9 -f "next start" 2>/dev/null || true
-                    pkill -9 -f "next-server" 2>/dev/null || true
-                    lsof -ti :${APP_PORT} | xargs kill -9 2>/dev/null || true
-                    sleep 1
-                    print_success "Existing services stopped"
-                fi
-
-                # Stop any running docker container
-                if command -v docker &> /dev/null && docker ps | grep -q "trend-ui"; then
-                    print_info "Stopping Docker container..."
-                    docker-compose down 2>/dev/null || docker stop trend-ui 2>/dev/null || true
-                    sleep 1
-                fi
-
-                echo ""
-                print_info "Building production build..."
-                local api_url=$(grep NEXT_PUBLIC_CRAWLER_API_BASE_URL .env.local 2>/dev/null | cut -d= -f2-)
-                NEXT_PUBLIC_CRAWLER_API_BASE_URL="${api_url}" npm run build
-
-                if [ $? -eq 0 ]; then
-                    echo ""
-                    print_info "Starting production server in background..."
-                    nohup npm start > /tmp/trend-ui-prod.log 2>&1 &
-                    disown
-                    sleep 3
-
-                    # Check if started successfully
-                    if pgrep -f "next start" > /dev/null; then
-                        print_success "Production server started!"
-                        echo -e "${CYAN}  → http://localhost:${APP_PORT}${NC}"
-                        echo -e "${CYAN}  → Logs: /tmp/trend-ui-prod.log${NC}"
-                        echo ""
-                        print_info "Use Option 3 (Check status) or Option 5 (Stop services) from main menu"
-                    else
-                        print_error "Failed to start production server"
-                        echo "Check logs: tail -f /tmp/trend-ui-prod.log"
-                    fi
-                else
-                    print_error "Build failed. Cannot start production server."
-                fi
-
-                echo ""
-                echo -e "${YELLOW}  0)${NC} Go back to main menu"
-                echo ""
-                while true; do
-                    read -p "Enter 0 to go back: " prod_choice
-                    if [ "$prod_choice" = "0" ]; then
-                        return 0
-                    fi
-                    print_warning "Invalid option. Press 0 to go back."
-                done
-                ;;
-            3)
-                if ! command -v docker &> /dev/null; then
-                    print_error "Docker is not installed"
-                    echo ""
-                    continue
-                fi
-
-                # Kill any existing services before starting
-                if pgrep -f "next dev\|next start\|next-server" > /dev/null || lsof -ti :${APP_PORT} > /dev/null 2>&1; then
-                    print_warning "Stopping existing services first..."
-                    pkill -9 -f "next dev" 2>/dev/null || true
-                    pkill -9 -f "next start" 2>/dev/null || true
-                    pkill -9 -f "next-server" 2>/dev/null || true
-                    lsof -ti :${APP_PORT} | xargs kill -9 2>/dev/null || true
-                    sleep 1
-                    print_success "Existing services stopped"
-                fi
-
-                # Stop any running docker container
-                if docker ps | grep -q "trend-ui"; then
-                    print_info "Stopping existing Docker container..."
-                    docker-compose down 2>/dev/null || docker stop trend-ui 2>/dev/null || true
-                    sleep 1
-                fi
-
-                echo ""
-                print_info "Starting with docker-compose in background..."
-                docker-compose up --build -d
-                sleep 3
-
-                # Check if started successfully
-                if docker ps | grep -q "trend-ui"; then
-                    print_success "Docker container started!"
-                    echo -e "${CYAN}  → http://localhost:${APP_PORT}${NC}"
-                    echo -e "${CYAN}  → Logs: docker-compose logs -f${NC}"
-                    echo ""
-                    print_info "Use Option 3 (Check status) or Option 5 (Stop services) from main menu"
-                else
-                    print_error "Failed to start docker container"
-                    echo "Check logs: docker-compose logs"
-                fi
-
-                echo ""
-                echo -e "${YELLOW}  0)${NC} Go back to main menu"
-                echo ""
-                while true; do
-                    read -p "Enter 0 to go back: " docker_choice
-                    if [ "$docker_choice" = "0" ]; then
-                        return 0
-                    fi
-                    print_warning "Invalid option. Press 0 to go back."
-                done
-                ;;
-            0)
-                print_info "Returning to main menu..."
-                echo ""
-                return 0
-                ;;
-            *)
-                print_warning "Invalid option"
-                echo ""
-                ;;
-        esac
-    done
+        print_info "Use Option 3 (Check status) or Option 5 (Stop services) from main menu"
+    else
+        print_error "Failed to start development server"
+        echo "Check logs: tail -f ${SCRIPT_DIR}/logs/dev.log"
+    fi
 }
 
 # View logs
 view_logs() {
-    clear
     print_header
     echo -e "${BOLD}View Logs:${NC}\n"
 
@@ -488,7 +342,7 @@ view_logs() {
                 print_info "Showing development logs (Press Ctrl+C to exit)..."
                 echo ""
                 sleep 1
-                tail -f /tmp/trend-ui-dev.log
+                tail -f "${SCRIPT_DIR}/logs/dev.log"
             else
                 print_warning "Development server is not running"
             fi
@@ -499,7 +353,7 @@ view_logs() {
                 print_info "Showing production logs (Press Ctrl+C to exit)..."
                 echo ""
                 sleep 1
-                tail -f /tmp/trend-ui-prod.log
+                tail -f "${SCRIPT_DIR}/logs/prod.log"
             else
                 print_warning "Production server is not running"
             fi
@@ -528,30 +382,27 @@ view_logs() {
 
 # Main menu
 show_menu() {
-    clear
     print_header
 
     echo -e "${BOLD}Please select an option:${NC}\n"
-    echo -e "  ${GREEN}1)${NC} Setup environment and run"
-    echo -e "  ${MAGENTA}2)${NC} Show access URLs"
+    echo -e "  ${GREEN}1)${NC} Setup and start service"
+    echo -e "  ${YELLOW}2)${NC} Stop all services"
     echo -e "  ${CYAN}3)${NC} Check service status"
-    echo -e "  ${BLUE}4)${NC} View logs"
-    echo -e "  ${YELLOW}5)${NC} Stop all services"
+    echo -e "  ${MAGENTA}4)${NC} Show access URLs"
     echo -e "  ${RED}0)${NC} Exit"
     echo ""
 }
 
 # Check service status
 check_status() {
-    clear
     print_header
     echo -e "${BOLD}Service Status:${NC}\n"
 
     # Check npm process
-    if pgrep -f "next dev\|next start" > /dev/null; then
+    if pgrep -f "next dev|next start|next-server" > /dev/null; then
         print_success "Next.js process is running"
         echo ""
-        ps aux | grep -E "next dev|next start" | grep -v grep
+        ps aux | grep -E "next dev|next start|next-server" | grep -v grep
     else
         print_info "No Next.js process found"
     fi
@@ -581,21 +432,10 @@ check_status() {
     fi
 
     echo ""
-    echo -e "${YELLOW}  0)${NC} Go back"
-    echo ""
-
-    while true; do
-        read -p "Enter 0 to go back: " status_choice
-        if [ "$status_choice" = "0" ]; then
-            return 0
-        fi
-        print_warning "Invalid option. Press 0 to go back."
-    done
 }
 
 # Stop all services
 stop_services() {
-    clear
     print_header
     echo -e "${BOLD}Stopping services...${NC}\n"
 
@@ -603,6 +443,7 @@ stop_services() {
 
     # Stop Next.js development server (kill entire process tree)
     if pgrep -f "next dev" > /dev/null; then
+        echo "[$(date -u '+%Y-%m-%d %H:%M:%S UTC')] === Stopping trend_ui dev server ===" >> "${SCRIPT_DIR}/logs/dev.log" 2>/dev/null
         print_info "Stopping Next.js development server..."
         # Kill all processes matching "next dev"
         pkill -9 -f "next dev" 2>/dev/null || true
@@ -616,6 +457,7 @@ stop_services() {
 
     # Stop Next.js production server (kill entire process tree)
     if pgrep -f "next start" > /dev/null; then
+        echo "[$(date -u '+%Y-%m-%d %H:%M:%S UTC')] === Stopping trend_ui prod server ===" >> "${SCRIPT_DIR}/logs/prod.log" 2>/dev/null
         print_info "Stopping Next.js production server..."
         # Kill all processes matching "next start"
         pkill -9 -f "next start" 2>/dev/null || true
@@ -645,7 +487,7 @@ stop_services() {
     fi
 
     # Verify all stopped
-    if pgrep -f "next dev\|next start\|next-server" > /dev/null; then
+    if pgrep -f "next dev|next start|next-server" > /dev/null; then
         print_warning "Some processes may still be running, force killing all Next.js processes..."
         pkill -9 -f "next" 2>/dev/null || true
         sleep 1
@@ -665,23 +507,13 @@ stop_services() {
     fi
 
     echo ""
-    echo -e "${YELLOW}  0)${NC} Go back"
-    echo ""
-
-    while true; do
-        read -p "Enter 0 to go back: " stop_choice
-        if [ "$stop_choice" = "0" ]; then
-            return 0
-        fi
-        print_warning "Invalid option. Press 0 to go back."
-    done
 }
 
 # Main loop
 main() {
     while true; do
         show_menu
-        read -p "Enter your choice [0-5]: " choice
+        read -p "Enter your choice [0-4]: " choice
 
         case $choice in
             1)
@@ -689,16 +521,13 @@ main() {
                 sleep 1
                 ;;
             2)
-                show_access_urls
+                stop_services
                 ;;
             3)
                 check_status
                 ;;
             4)
-                view_logs
-                ;;
-            5)
-                stop_services
+                show_access_urls
                 ;;
             0)
                 echo ""
