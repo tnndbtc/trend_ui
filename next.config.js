@@ -15,7 +15,12 @@ const nextConfig = {
       {
         source: '/api/v1/:path*',
         destination: 'http://127.0.0.1:8002/api/v1/:path*',
-        basePath: false, // Prevent Next.js from prepending /app to the source path
+        basePath: false,
+      },
+      {
+        source: '/api/stories/:path*',
+        destination: 'http://127.0.0.1:8003/api/stories/:path*',
+        basePath: false,
       },
     ]
   },

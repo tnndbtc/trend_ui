@@ -25,6 +25,20 @@ export default function RootLayout({
                   <span className="font-bold text-xl">🌍 Trend Feed</span>
                 </a>
               </div>
+              <nav className="flex items-center gap-1">
+                <a
+                  href="/app"
+                  className="px-3 py-1.5 text-sm font-medium rounded-md hover:bg-muted transition-colors text-foreground/70 hover:text-foreground"
+                >
+                  Feed
+                </a>
+                <a
+                  href="/app/stories"
+                  className="px-3 py-1.5 text-sm font-medium rounded-md hover:bg-muted transition-colors text-foreground/70 hover:text-foreground"
+                >
+                  Stories
+                </a>
+              </nav>
             </div>
           </header>
           <main>{children}</main>

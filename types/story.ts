@@ -1,0 +1,71 @@
+/**
+ * TypeScript types for story_engine API responses.
+ * Must match the Pydantic schemas in story_engine/src/api/schemas.py
+ */
+
+export interface SourceItem {
+  url: string
+  platform: string
+  hotness: number
+  title: string
+}
+
+export interface CommentItem {
+  text: string
+  likes: number
+  platform: string
+}
+
+export interface Script {
+  hook: string
+  bullets: string[]
+  twist: string
+  full_text: string
+}
+
+export type FormatType =
+  | 'explainer'
+  | 'top5'
+  | 'radar'
+  | 'regional'
+  | 'two_takes'
+  | 'pattern'
+  | 'viral'
+  | 'deep_dive'
+  | 'niche'
+
+export type StoryLang = 'en' | 'zh'
+export type StoryStatus = 'generating' | 'ready' | 'failed'
+
+export interface StoryCard {
+  id: number
+  title: string
+  format: FormatType
+  channel: number
+  lang: StoryLang
+  status: StoryStatus
+  generated_at: string | null
+  sources_count: number
+}
+
+export interface Story extends StoryCard {
+  script: Script
+  sources: SourceItem[]
+  comments_used: CommentItem[]
+}
+
+export interface StoriesListResponse {
+  date: string
+  generated_at: string
+  total: number
+  stories: Story[]
+}
+
+export interface EngineStatus {
+  scheduler: string
+  last_run_at: string | null
+  last_run_status: string | null
+  stories_today: number
+  crawler_db_path: string
+  crawler_db_reachable: boolean
+}
