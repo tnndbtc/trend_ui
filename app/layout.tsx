@@ -26,12 +26,14 @@ export default function RootLayout({
                 </a>
               </div>
               <nav className="flex items-center gap-1">
+                {/* Feed tab hidden — uncomment to restore
                 <a
                   href="/app"
                   className="px-3 py-1.5 text-sm font-medium rounded-md hover:bg-muted transition-colors text-foreground/70 hover:text-foreground"
                 >
                   Feed
                 </a>
+                */}
                 <a
                   href="/app/stories"
                   className="px-3 py-1.5 text-sm font-medium rounded-md hover:bg-muted transition-colors text-foreground/70 hover:text-foreground"

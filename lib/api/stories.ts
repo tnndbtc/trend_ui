@@ -5,7 +5,7 @@
  * Next.js rewrites proxy /api/stories/* to the story_engine backend.
  */
 
-import type { Story, StoriesListResponse, StoryLang, FormatType } from '@/types/story'
+import type { Story, StoriesListResponse, StorySetSummary, StoryLang, FormatType } from '@/types/story'
 
 const STORY_API_BASE = process.env.NEXT_PUBLIC_STORY_API_BASE_URL || '/api'
 
@@ -49,6 +49,20 @@ export async function fetchStory(id: number): Promise<Story> {
 /**
  * Fetch stories list with optional filters.
  */
+/**
+ * Fetch all story sets.
+ */
+export async function fetchStorySets(): Promise<StorySetSummary[]> {
+  return storyFetch<StorySetSummary[]>('/story-sets')
+}
+
+/**
+ * Fetch stories in a specific story set.
+ */
+export async function fetchStorySet(setId: number): Promise<StoriesListResponse> {
+  return storyFetch<StoriesListResponse>(`/story-sets/${setId}`)
+}
+
 export async function fetchStories(opts?: {
   date?: string
   format?: FormatType

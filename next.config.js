@@ -22,6 +22,11 @@ const nextConfig = {
         destination: 'http://127.0.0.1:8003/api/stories/:path*',
         basePath: false,
       },
+      {
+        source: '/api/story-sets/:path*',
+        destination: 'http://127.0.0.1:8003/api/story-sets/:path*',
+        basePath: false,
+      },
     ]
   },
 }

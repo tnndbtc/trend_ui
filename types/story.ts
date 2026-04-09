@@ -61,6 +61,15 @@ export interface StoriesListResponse {
   stories: Story[]
 }
 
+export interface StorySetSummary {
+  id: number
+  batch_ts: string
+  lang: string
+  channel: number
+  status: string
+  story_count: number
+}
+
 export interface EngineStatus {
   scheduler: string
   last_run_at: string | null
