@@ -72,7 +72,7 @@ const FORMAT_COLORS: Record<string, string> = {
 function formatTime(dateStr: string | null): string {
   if (!dateStr) return ''
   const date = new Date(dateStr)
-  return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+  return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: true })
 }
 
 export function StoryCard({ story, defaultExpanded = false }: StoryCardProps) {

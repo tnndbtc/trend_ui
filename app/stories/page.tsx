@@ -13,12 +13,11 @@ interface StorySetWithStories {
 
 function formatSetTime(batchTs: string): string {
   const date = new Date(batchTs)
-  return date.toLocaleString('zh-CN', {
-    month: 'numeric',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
+  const year = date.getFullYear()
+  const month = date.getMonth() + 1
+  const day = date.getDate()
+  const timeStr = date.toLocaleTimeString('zh-CN', { hour: 'numeric', minute: '2-digit', hour12: true })
+  return `${year}年${month}月${day}日 ${timeStr}`
 }
 
 function SetHeader({
