@@ -11,6 +11,23 @@ interface StorySetWithStories {
   loaded: boolean
 }
 
+// Channel tab definitions — each tab maps to one story_engine per-run
+// overlay profile. The 'all' tab shows every set regardless of profile.
+// Keep profile ids in sync with story_engine/config/story_mix_*.json.
+interface ChannelTab {
+  id: string              // URL query value
+  label: string           // display label (Chinese)
+  profile: string | null  // API filter; null = all
+  description: string     // subtitle under the tab
+}
+
+const CHANNEL_TABS: ChannelTab[] = [
+  { id: 'all',      label: '全部',       profile: null,           description: '所有频道' },
+  { id: 'politics', label: '政治·国际',   profile: 'run3_world',    description: 'Politics / World' },
+  { id: 'ai',       label: 'AI·科技',     profile: 'run2_ai',       description: 'AI / Tech / Science' },
+  { id: 'business', label: '商业·财经',   profile: 'run4_business', description: 'Business / Finance' },
+]
+
 function formatSetTime(batchTs: string): string {
   const date = new Date(batchTs)
   const year = date.getFullYear()
@@ -58,15 +75,31 @@ export default function StoriesPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [expandedSets, setExpandedSets] = useState<Set<number>>(new Set())
+  const [activeTab, setActiveTab] = useState<string>('all')
+
+  // Read initial tab from URL query string (for shareable links + back/forward)
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    const tab = params.get('tab')
+    if (tab && CHANNEL_TABS.some(t => t.id === tab)) {
+      setActiveTab(tab)
+    }
+  }, [])
 
   useEffect(() => {
     async function load() {
       try {
         setLoading(true)
         setError(null)
+        setLegacyStories([])
 
-        // Fetch story sets
-        const sets = await fetchStorySets()
+        // Resolve current tab's profile filter
+        const tab = CHANNEL_TABS.find(t => t.id === activeTab) || CHANNEL_TABS[0]
+        const profileFilter = tab.profile ?? undefined
+
+        // Fetch story sets (filtered by profile if tab is not 'all')
+        const sets = await fetchStorySets(profileFilter)
 
         if (sets.length > 0) {
           // Load stories for all sets
@@ -90,9 +123,13 @@ export default function StoriesPage() {
             setExpandedSets(new Set([setsWithStories[0].set.id]))
           }
         } else {
-          // No story sets — fall back to legacy /stories/today
-          const data = await fetchStoriesToday('zh')
-          setLegacyStories(data.stories.filter(s => s.status === 'ready'))
+          setStorySets([])
+          // Only fall back to legacy view on the "all" tab — for channel
+          // tabs an empty result just means no batches for that channel yet.
+          if (activeTab === 'all') {
+            const data = await fetchStoriesToday('zh')
+            setLegacyStories(data.stories.filter(s => s.status === 'ready'))
+          }
         }
       } catch (err) {
         console.error('Failed to load stories:', err)
@@ -102,7 +139,22 @@ export default function StoriesPage() {
       }
     }
     load()
-  }, [])
+  }, [activeTab])
+
+  const handleTabClick = (tabId: string) => {
+    if (tabId === activeTab) return
+    setActiveTab(tabId)
+    // Update URL query string without a full page reload
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href)
+      if (tabId === 'all') {
+        url.searchParams.delete('tab')
+      } else {
+        url.searchParams.set('tab', tabId)
+      }
+      window.history.pushState({}, '', url.toString())
+    }
+  }
 
   const toggleSet = (setId: number) => {
     setExpandedSets(prev => {
@@ -121,13 +173,34 @@ export default function StoriesPage() {
   return (
     <div className="feed-container mx-auto px-4 py-6">
       {/* Page header */}
-      <div className="mb-6">
+      <div className="mb-4">
         <h1 className="text-2xl font-bold">Global Signal Radar</h1>
-        {storySets.length > 0 && (
+        {storySets.length > 0 && !loading && (
           <p className="text-sm text-muted-foreground mt-1">
             {storySets.length} 组故事
           </p>
         )}
+      </div>
+
+      {/* Channel tab bar */}
+      <div className="mb-6 flex gap-2 border-b border-border overflow-x-auto">
+        {CHANNEL_TABS.map(tab => {
+          const active = tab.id === activeTab
+          return (
+            <button
+              key={tab.id}
+              onClick={() => handleTabClick(tab.id)}
+              className={`px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors border-b-2 -mb-px ${
+                active
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-muted-foreground hover:text-foreground hover:border-muted'
+              }`}
+              title={tab.description}
+            >
+              {tab.label}
+            </button>
+          )
+        })}
       </div>
 
       {/* Loading state */}
@@ -228,7 +301,11 @@ export default function StoriesPage() {
         <div className="border border-border rounded-xl bg-card p-8 text-center">
           <p className="text-lg mb-1">暂无故事</p>
           <p className="text-sm text-muted-foreground">
-            运行 story_engine setup.sh 选项 5 来生成故事
+            {activeTab === 'all'
+              ? '运行 story_engine setup.sh 选项 5 来生成故事'
+              : `该频道暂无内容 — 等待下次 ${
+                  CHANNEL_TABS.find(t => t.id === activeTab)?.profile
+                } 定时任务生成`}
           </p>
         </div>
       )}

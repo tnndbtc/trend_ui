@@ -59,6 +59,7 @@ export interface StorySetSummary {
   channel: number
   status: string
   story_count: number
+  profile_id?: string | null  // per-run overlay id, e.g. "run2_ai"
 }
 
 export interface EngineStatus {

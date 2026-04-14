@@ -50,10 +50,14 @@ export async function fetchStory(id: number): Promise<Story> {
  * Fetch stories list with optional filters.
  */
 /**
- * Fetch all story sets.
+ * Fetch story sets, optionally filtered by per-run overlay profile id.
+ *
+ * @param profile  Optional profile filter, e.g. "run2_ai". When provided,
+ *                 only returns sets generated under that channel profile.
+ *                 Used by the /stories page channel tabs.
  */
-export async function fetchStorySets(): Promise<StorySetSummary[]> {
-  return storyFetch<StorySetSummary[]>('/story-sets')
+export async function fetchStorySets(profile?: string): Promise<StorySetSummary[]> {
+  return storyFetch<StorySetSummary[]>('/story-sets', { profile })
 }
 
 /**
