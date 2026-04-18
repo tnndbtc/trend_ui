@@ -21,9 +21,11 @@ interface ChannelTab {
 }
 
 const CHANNEL_TABS: ChannelTab[] = [
-  { id: 'politics', label: '政治·国际',   profile: 'run3_world',    description: 'Politics / World' },
-  { id: 'ai',       label: 'AI·科技',     profile: 'run2_ai',       description: 'AI / Tech / Science' },
-  { id: 'business', label: '商业·财经',   profile: 'run4_business', description: 'Business / Finance' },
+  { id: 'politics',      label: '政治·国际', profile: 'run3_world',         description: 'Politics / World' },
+  { id: 'ai',            label: 'AI·科技',   profile: 'run2_ai',            description: 'AI / Tech / Science' },
+  { id: 'business',      label: '商业·财经', profile: 'run4_business',      description: 'Business / Finance' },
+  { id: 'entertainment', label: '娱乐·体育', profile: 'run5_entertainment', description: 'Entertainment / Sports' },
+  { id: 'others',        label: '社会·世界', profile: 'run6_others',        description: 'Society / World' },
 ]
 
 function formatSetTime(batchTs: string): string {
