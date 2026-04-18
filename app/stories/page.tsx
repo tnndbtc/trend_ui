@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import type { Story, StorySetSummary } from '@/types/story'
-import { fetchStorySets, fetchStorySet, fetchStoriesToday } from '@/lib/api/stories'
+import { fetchStorySets, fetchStorySet } from '@/lib/api/stories'
 import { StoryCard } from '@/components/StoryCard'
 
 interface StorySetWithStories {
@@ -12,8 +12,7 @@ interface StorySetWithStories {
 }
 
 // Channel tab definitions — each tab maps to one story_engine per-run
-// overlay profile. The 'all' tab shows every set regardless of profile.
-// Keep profile ids in sync with story_engine/config/story_mix_*.json.
+// overlay profile. Keep profile ids in sync with story_engine/config/story_mix_*.json.
 interface ChannelTab {
   id: string              // URL query value
   label: string           // display label (Chinese)
@@ -22,7 +21,6 @@ interface ChannelTab {
 }
 
 const CHANNEL_TABS: ChannelTab[] = [
-  { id: 'all',      label: '全部',       profile: null,           description: '所有频道' },
   { id: 'politics', label: '政治·国际',   profile: 'run3_world',    description: 'Politics / World' },
   { id: 'ai',       label: 'AI·科技',     profile: 'run2_ai',       description: 'AI / Tech / Science' },
   { id: 'business', label: '商业·财经',   profile: 'run4_business', description: 'Business / Finance' },
@@ -71,11 +69,10 @@ function SetHeader({
 
 export default function StoriesPage() {
   const [storySets, setStorySets] = useState<StorySetWithStories[]>([])
-  const [legacyStories, setLegacyStories] = useState<Story[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [expandedSets, setExpandedSets] = useState<Set<number>>(new Set())
-  const [activeTab, setActiveTab] = useState<string>('all')
+  const [activeTab, setActiveTab] = useState<string>('politics')
 
   // Read initial tab from URL query string (for shareable links + back/forward)
   useEffect(() => {
@@ -92,7 +89,6 @@ export default function StoriesPage() {
       try {
         setLoading(true)
         setError(null)
-        setLegacyStories([])
 
         // Resolve current tab's profile filter
         const tab = CHANNEL_TABS.find(t => t.id === activeTab) || CHANNEL_TABS[0]
@@ -124,12 +120,6 @@ export default function StoriesPage() {
           }
         } else {
           setStorySets([])
-          // Only fall back to legacy view on the "all" tab — for channel
-          // tabs an empty result just means no batches for that channel yet.
-          if (activeTab === 'all') {
-            const data = await fetchStoriesToday('zh')
-            setLegacyStories(data.stories.filter(s => s.status === 'ready'))
-          }
         }
       } catch (err) {
         console.error('Failed to load stories:', err)
@@ -147,11 +137,7 @@ export default function StoriesPage() {
     // Update URL query string without a full page reload
     if (typeof window !== 'undefined') {
       const url = new URL(window.location.href)
-      if (tabId === 'all') {
-        url.searchParams.delete('tab')
-      } else {
-        url.searchParams.set('tab', tabId)
-      }
+      url.searchParams.set('tab', tabId)
       window.history.pushState({}, '', url.toString())
     }
   }
@@ -283,29 +269,14 @@ export default function StoriesPage() {
         </div>
       )}
 
-      {/* Legacy view (no story sets) */}
-      {!loading && !error && storySets.length === 0 && legacyStories.length > 0 && (
-        <div className="space-y-4">
-          {legacyStories.map((story, i) => (
-            <StoryCard
-              key={story.id}
-              story={story}
-              defaultExpanded={i === 0}
-            />
-          ))}
-        </div>
-      )}
-
       {/* Empty state */}
-      {!loading && !error && storySets.length === 0 && legacyStories.length === 0 && (
+      {!loading && !error && storySets.length === 0 && (
         <div className="border border-border rounded-xl bg-card p-8 text-center">
           <p className="text-lg mb-1">暂无故事</p>
           <p className="text-sm text-muted-foreground">
-            {activeTab === 'all'
-              ? '运行 story_engine setup.sh 选项 5 来生成故事'
-              : `该频道暂无内容 — 等待下次 ${
-                  CHANNEL_TABS.find(t => t.id === activeTab)?.profile
-                } 定时任务生成`}
+            {`该频道暂无内容 — 等待下次 ${
+                CHANNEL_TABS.find(t => t.id === activeTab)?.profile
+              } 定时任务生成`}
           </p>
         </div>
       )}
