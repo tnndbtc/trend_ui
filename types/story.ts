@@ -37,6 +37,7 @@ export interface StoryCard {
   status: StoryStatus
   generated_at: string | null
   sources_count: number
+  token_estimate?: number | null  // chars/4 proxy; only set for deep_story format
 }
 
 export interface Story extends StoryCard {

@@ -39,10 +39,12 @@ function formatSetTime(batchTs: string): string {
 
 function SetHeader({
   set,
+  storyCount,
   expanded,
   onToggle,
 }: {
   set: StorySetSummary
+  storyCount: number
   expanded: boolean
   onToggle: () => void
 }) {
@@ -56,7 +58,7 @@ function SetHeader({
           {formatSetTime(set.batch_ts)}
         </span>
         <span className="text-xs text-muted-foreground">
-          {set.story_count} 篇故事
+          {storyCount} 篇故事
         </span>
         {set.status === 'failed' && (
           <span className="text-xs text-destructive">生成失败</span>
@@ -242,6 +244,7 @@ export default function StoriesPage() {
                 ) : (
                   <SetHeader
                     set={sw.set}
+                    storyCount={sw.stories.length}
                     expanded={isExpanded}
                     onToggle={() => toggleSet(sw.set.id)}
                   />

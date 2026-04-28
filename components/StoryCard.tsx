@@ -17,6 +17,8 @@ const FORMAT_LABELS: Record<string, string> = {
   pattern: '趋势分析',
   viral: '即将爆火',
   deep_dive: '深度报道',
+  deep_story: '深度报道',
+  supporting: '相关报道',
   niche: '专题聚焦',
   format_10: '反直觉',
   format_11: '角色代入',
@@ -95,6 +97,11 @@ export function StoryCard({ story, defaultExpanded = false }: StoryCardProps) {
           {story.sources_count > 0 && (
             <span className="text-xs text-muted-foreground">
               {story.sources_count} 源
+            </span>
+          )}
+          {story.token_estimate != null && (
+            <span className="text-xs text-muted-foreground/70" title="估算 token 用量 (字符数 ÷ 4)">
+              ~{(story.token_estimate / 1000).toFixed(1)}K tokens
             </span>
           )}
         </div>
