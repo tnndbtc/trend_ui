@@ -1,9 +1,11 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import type { Story, StorySetSummary } from '@/types/story'
+import type { Story, StorySetSummary, StoryLang } from '@/types/story'
 import { fetchStorySets, fetchStorySet } from '@/lib/api/stories'
 import { StoryCard } from '@/components/StoryCard'
+
+const LANG_STORAGE_KEY = 'preferred_story_lang'
 
 interface StorySetWithStories {
   set: StorySetSummary
@@ -18,14 +20,15 @@ interface ChannelTab {
   label: string           // display label (Chinese)
   profile: string | null  // API filter; null = all
   description: string     // subtitle under the tab
+  enFormat: string        // English format ID for per-tab filtering (formats 101–105)
 }
 
 const CHANNEL_TABS: ChannelTab[] = [
-  { id: 'politics',      label: '政治·国际', profile: 'run3_world',         description: 'Politics / World' },
-  { id: 'ai',            label: 'AI·科技',   profile: 'run2_ai',            description: 'AI / Tech / Science' },
-  { id: 'business',      label: '商业·财经', profile: 'run4_business',      description: 'Business / Finance' },
-  { id: 'entertainment', label: '娱乐·体育', profile: 'run5_entertainment', description: 'Entertainment / Sports' },
-  { id: 'others',        label: '社会·世界', profile: 'run6_others',        description: 'Society / World' },
+  { id: 'politics',      label: '政治·国际', profile: 'run3_world',         description: 'Politics / World',        enFormat: 'format_101' },
+  { id: 'ai',            label: 'AI·科技',   profile: 'run2_ai',            description: 'AI / Tech / Science',     enFormat: 'format_102' },
+  { id: 'business',      label: '商业·财经', profile: 'run4_business',      description: 'Business / Finance',      enFormat: 'format_103' },
+  { id: 'entertainment', label: '娱乐·体育', profile: 'run5_entertainment', description: 'Entertainment / Sports',  enFormat: 'format_104' },
+  { id: 'others',        label: '社会·世界', profile: 'run6_others',        description: 'Society / World',         enFormat: 'format_105' },
 ]
 
 function formatSetTime(batchTs: string): string {
@@ -42,11 +45,13 @@ function SetHeader({
   storyCount,
   expanded,
   onToggle,
+  lang,
 }: {
   set: StorySetSummary
   storyCount: number
   expanded: boolean
   onToggle: () => void
+  lang: StoryLang
 }) {
   return (
     <button
@@ -58,7 +63,7 @@ function SetHeader({
           {formatSetTime(set.batch_ts)}
         </span>
         <span className="text-xs text-muted-foreground">
-          {storyCount} 篇故事
+          {storyCount} {lang === 'en' ? 'stories' : '篇故事'}
         </span>
         {set.status === 'failed' && (
           <span className="text-xs text-destructive">生成失败</span>
@@ -77,10 +82,14 @@ export default function StoriesPage() {
   const [error, setError] = useState<string | null>(null)
   const [expandedSets, setExpandedSets] = useState<Set<number>>(new Set())
   const [activeTab, setActiveTab] = useState<string>('politics')
+  const [storyLang, setStoryLang] = useState<StoryLang>('zh')
 
-  // Read initial tab from URL query string (for shareable links + back/forward)
+  // Restore persisted lang preference and initial tab from URL on mount
   useEffect(() => {
     if (typeof window === 'undefined') return
+    const saved = localStorage.getItem(LANG_STORAGE_KEY) as StoryLang | null
+    if (saved === 'en' || saved === 'zh') setStoryLang(saved)
+
     const params = new URLSearchParams(window.location.search)
     const tab = params.get('tab')
     if (tab && CHANNEL_TABS.some(t => t.id === tab)) {
@@ -88,18 +97,29 @@ export default function StoriesPage() {
     }
   }, [])
 
+  const handleLangChange = (lang: StoryLang) => {
+    setStoryLang(lang)
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(LANG_STORAGE_KEY, lang)
+    }
+  }
+
   useEffect(() => {
     async function load() {
       try {
         setLoading(true)
         setError(null)
 
-        // Resolve current tab's profile filter
+        // Resolve current tab's profile filter.
+        // For English runs, all 5 categories are produced in one job with
+        // profile_id='run_en' — the Chinese per-tab profiles (run3_world, etc.)
+        // do not match. Skip the profile filter for English so the single
+        // run_en story set appears on every tab.
         const tab = CHANNEL_TABS.find(t => t.id === activeTab) || CHANNEL_TABS[0]
-        const profileFilter = tab.profile ?? undefined
+        const profileFilter = storyLang === 'en' ? undefined : (tab.profile ?? undefined)
 
-        // Fetch story sets (filtered by profile if tab is not 'all')
-        const sets = await fetchStorySets(profileFilter)
+        // Fetch story sets filtered by profile + lang
+        const sets = await fetchStorySets(profileFilter, storyLang)
 
         if (sets.length > 0) {
           // Load stories for all sets
@@ -133,7 +153,7 @@ export default function StoriesPage() {
       }
     }
     load()
-  }, [activeTab])
+  }, [activeTab, storyLang])
 
   const handleTabClick = (tabId: string) => {
     if (tabId === activeTab) return
@@ -163,13 +183,25 @@ export default function StoriesPage() {
   return (
     <div className="feed-container mx-auto px-4 py-6">
       {/* Page header */}
-      <div className="mb-4">
-        <h1 className="text-2xl font-bold">Global Signal Radar</h1>
-        {storySets.length > 0 && !loading && (
-          <p className="text-sm text-muted-foreground mt-1">
-            {storySets.length} 组故事
-          </p>
-        )}
+      <div className="mb-4 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Global Signal Radar</h1>
+          {storySets.length > 0 && !loading && (
+            <p className="text-sm text-muted-foreground mt-1">
+              {storySets.length} {storyLang === 'en' ? 'story sets' : '组故事'}
+            </p>
+          )}
+        </div>
+
+        {/* Language selector */}
+        <select
+          value={storyLang}
+          onChange={(e) => handleLangChange(e.target.value as StoryLang)}
+          className="px-3 py-1.5 text-sm rounded-md bg-secondary hover:bg-secondary/80 border border-border focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer transition-colors"
+        >
+          <option value="en">English</option>
+          <option value="zh">中文</option>
+        </select>
       </div>
 
       {/* Channel tab bar */}
@@ -226,6 +258,13 @@ export default function StoriesPage() {
             const isLatest = isLatestSet(index)
             const isExpanded = expandedSets.has(sw.set.id)
 
+            // English: show only the story whose format matches this tab.
+            // Chinese: show all stories in the set (profile filter already scoped the set).
+            const tab = CHANNEL_TABS.find(t => t.id === activeTab) ?? CHANNEL_TABS[0]
+            const visibleStories = storyLang === 'en'
+              ? sw.stories.filter(s => s.format === tab.enFormat)
+              : sw.stories
+
             return (
               <div key={sw.set.id}>
                 {/* Set header — latest set has no collapse button */}
@@ -235,7 +274,7 @@ export default function StoriesPage() {
                       {formatSetTime(sw.set.batch_ts)}
                     </span>
                     <span className="text-xs text-muted-foreground">
-                      {sw.stories.length} 篇故事
+                      {visibleStories.length} {storyLang === 'en' ? 'stories' : '篇故事'}
                     </span>
                     <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">
                       最新
@@ -244,17 +283,18 @@ export default function StoriesPage() {
                 ) : (
                   <SetHeader
                     set={sw.set}
-                    storyCount={sw.stories.length}
+                    storyCount={visibleStories.length}
                     expanded={isExpanded}
                     onToggle={() => toggleSet(sw.set.id)}
+                    lang={storyLang}
                   />
                 )}
 
                 {/* Stories — latest always shown, others toggle */}
                 {(isLatest || isExpanded) && (
                   <div className="space-y-4 mt-3">
-                    {sw.stories.length > 0 ? (
-                      sw.stories.map(story => (
+                    {visibleStories.length > 0 ? (
+                      visibleStories.map(story => (
                         <StoryCard
                           key={story.id}
                           story={story}
@@ -277,12 +317,23 @@ export default function StoriesPage() {
       {/* Empty state */}
       {!loading && !error && storySets.length === 0 && (
         <div className="border border-border rounded-xl bg-card p-8 text-center">
-          <p className="text-lg mb-1">暂无故事</p>
-          <p className="text-sm text-muted-foreground">
-            {`该频道暂无内容 — 等待下次 ${
-                CHANNEL_TABS.find(t => t.id === activeTab)?.profile
-              } 定时任务生成`}
-          </p>
+          {storyLang === 'en' ? (
+            <>
+              <p className="text-lg mb-1">No stories yet</p>
+              <p className="text-sm text-muted-foreground">
+                {`Run: ./run_generate.sh 101-105 --lang en --profile run_en`}
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-lg mb-1">暂无故事</p>
+              <p className="text-sm text-muted-foreground">
+                {`该频道暂无内容 — 等待下次 ${
+                    CHANNEL_TABS.find(t => t.id === activeTab)?.profile
+                  } 定时任务生成`}
+              </p>
+            </>
+          )}
         </div>
       )}
     </div>

@@ -106,7 +106,8 @@ export default function ItemDetailPage() {
             onChange={(e) => setLanguage(e.target.value as Language)}
             className="px-3 py-1.5 text-sm rounded-md bg-secondary hover:bg-secondary/80 border border-border focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer transition-colors"
           >
-            <option value="zh-Hans">中文</option>
+            <option value="en-US">English</option>
+          <option value="zh-Hans">中文</option>
           </select>
         </div>
 

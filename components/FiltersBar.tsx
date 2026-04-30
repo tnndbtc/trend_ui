@@ -24,6 +24,7 @@ export function FiltersBar({ language, onLanguageChange }: FiltersBarProps) {
           onChange={(e) => onLanguageChange(e.target.value as Language)}
           className="px-4 py-2 text-sm rounded-md bg-secondary hover:bg-secondary/80 border border-border focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer transition-colors"
         >
+          <option value="en-US">English</option>
           <option value="zh-Hans">中文</option>
         </select>
       </div>

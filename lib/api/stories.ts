@@ -56,8 +56,8 @@ export async function fetchStory(id: number): Promise<Story> {
  *                 only returns sets generated under that channel profile.
  *                 Used by the /stories page channel tabs.
  */
-export async function fetchStorySets(profile?: string): Promise<StorySetSummary[]> {
-  return storyFetch<StorySetSummary[]>('/story-sets', { profile })
+export async function fetchStorySets(profile?: string, lang?: StoryLang): Promise<StorySetSummary[]> {
+  return storyFetch<StorySetSummary[]>('/story-sets', { profile, lang })
 }
 
 /**
