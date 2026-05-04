@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import type { Story, StorySetSummary, StoryLang } from '@/types/story'
-import { fetchStorySets, fetchStorySet } from '@/lib/api/stories'
+import type { Story, StorySetSummary, StoryLang, YoutubeAnalyticRow } from '@/types/story'
+import { fetchStorySets, fetchStorySet, fetchAnalytics } from '@/lib/api/stories'
 import { StoryCard } from '@/components/StoryCard'
 
 const LANG_STORAGE_KEY = 'preferred_story_lang'
@@ -20,16 +20,51 @@ interface ChannelTab {
   label: string           // display label (Chinese)
   profile: string | null  // API filter; null = all
   description: string     // subtitle under the tab
-  enFormat: string        // English format ID for per-tab filtering (formats 101–105)
 }
 
 const CHANNEL_TABS: ChannelTab[] = [
-  { id: 'politics',      label: '政治·国际', profile: 'run3_world',         description: 'Politics / World',        enFormat: 'format_101' },
-  { id: 'ai',            label: 'AI·科技',   profile: 'run2_ai',            description: 'AI / Tech / Science',     enFormat: 'format_102' },
-  { id: 'business',      label: '商业·财经', profile: 'run4_business',      description: 'Business / Finance',      enFormat: 'format_103' },
-  { id: 'entertainment', label: '娱乐·体育', profile: 'run5_entertainment', description: 'Entertainment / Sports',  enFormat: 'format_104' },
-  { id: 'others',        label: '社会·世界', profile: 'run6_others',        description: 'Society / World',         enFormat: 'format_105' },
+  { id: 'politics',      label: '政治·国际', profile: 'run3_world',         description: 'Politics / World'       },
+  { id: 'ai',            label: 'AI·科技',   profile: 'run2_ai',            description: 'AI / Tech / Science'    },
+  { id: 'business',      label: '商业·财经', profile: 'run4_business',      description: 'Business / Finance'     },
+  { id: 'entertainment', label: '娱乐·体育', profile: 'run5_entertainment', description: 'Entertainment / Sports' },
+  { id: 'others',        label: '社会·世界', profile: 'run6_others',        description: 'Society / World'        },
 ]
+
+/** Format a single analytics row into a short readable string. */
+function formatAnalyticsRow(row: YoutubeAnalyticRow): string {
+  if (row.analytics_pulled_at === null) return '⏳ pending'
+  if (row.analytics_pulled_at === 'no_data') return 'no data'
+  const parts: string[] = []
+  if (row.views != null)             parts.push(`${row.views.toLocaleString()} views`)
+  if (row.avg_view_duration != null) parts.push(`⏱ ${Math.round(row.avg_view_duration)}s`)
+  if (row.avg_view_pct != null)      parts.push(`👁 ${row.avg_view_pct.toFixed(0)}%`)
+  return parts.length ? parts.join('  ') : '—'
+}
+
+/**
+ * rows=undefined  → no video published for this set yet → show "📹 not published"
+ * rows=[]         → published but no log row → same placeholder
+ * rows=[...]      → show per-locale analytics (pending / data / no-data)
+ */
+function AnalyticsBadge({ rows }: { rows: YoutubeAnalyticRow[] | undefined }) {
+  if (!rows || rows.length === 0) {
+    return (
+      <span className="text-xs text-muted-foreground/40 font-mono">
+        📹 not published
+      </span>
+    )
+  }
+  return (
+    <div className="flex flex-col gap-0.5">
+      {rows.map(row => (
+        <span key={row.video_id} className="text-xs text-muted-foreground/70 font-mono">
+          <span className="text-muted-foreground/40 mr-1">[{row.lang}]</span>
+          {formatAnalyticsRow(row)}
+        </span>
+      ))}
+    </div>
+  )
+}
 
 function formatSetTime(batchTs: string): string {
   const date = new Date(batchTs)
@@ -46,19 +81,21 @@ function SetHeader({
   expanded,
   onToggle,
   lang,
+  analytics,
 }: {
   set: StorySetSummary
   storyCount: number
   expanded: boolean
   onToggle: () => void
   lang: StoryLang
+  analytics: YoutubeAnalyticRow[] | undefined
 }) {
   return (
     <button
       onClick={onToggle}
       className="w-full flex items-center justify-between px-4 py-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors text-left"
     >
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 flex-wrap">
         <span className="text-sm font-medium text-foreground">
           {formatSetTime(set.batch_ts)}
         </span>
@@ -68,8 +105,9 @@ function SetHeader({
         {set.status === 'failed' && (
           <span className="text-xs text-destructive">生成失败</span>
         )}
+        <AnalyticsBadge rows={analytics} />
       </div>
-      <span className="text-xs text-muted-foreground">
+      <span className="text-xs text-muted-foreground shrink-0 ml-2">
         {expanded ? '收起 ▲' : '展开 ▼'}
       </span>
     </button>
@@ -83,6 +121,8 @@ export default function StoriesPage() {
   const [expandedSets, setExpandedSets] = useState<Set<number>>(new Set())
   const [activeTab, setActiveTab] = useState<string>('politics')
   const [storyLang, setStoryLang] = useState<StoryLang>('zh')
+  // Analytics keyed by story_set_id — fetched alongside stories, best-effort
+  const [analyticsMap, setAnalyticsMap] = useState<Map<number, YoutubeAnalyticRow[]>>(new Map())
 
   // Restore persisted lang preference and initial tab from URL on mount
   useEffect(() => {
@@ -111,32 +151,43 @@ export default function StoriesPage() {
         setError(null)
 
         // Resolve current tab's profile filter.
-        // For English runs, all 5 categories are produced in one job with
-        // profile_id='run_en' — the Chinese per-tab profiles (run3_world, etc.)
-        // do not match. Skip the profile filter for English so the single
-        // run_en story set appears on every tab.
+        // English cron jobs now use the same per-channel profiles as Chinese
+        // (run3_world, run2_ai, run4_business, etc.) so we apply the same
+        // profile filter regardless of language.
         const tab = CHANNEL_TABS.find(t => t.id === activeTab) || CHANNEL_TABS[0]
-        const profileFilter = storyLang === 'en' ? undefined : (tab.profile ?? undefined)
+        const profileFilter = tab.profile ?? undefined
 
         // Fetch story sets filtered by profile + lang
         const sets = await fetchStorySets(profileFilter, storyLang)
 
         if (sets.length > 0) {
-          // Load stories for all sets
-          const setsWithStories: StorySetWithStories[] = []
-          for (const set of sets) {
-            try {
-              const data = await fetchStorySet(set.id)
-              setsWithStories.push({
-                set,
-                stories: data.stories.filter(s => s.status === 'ready'),
-                loaded: true,
-              })
-            } catch {
-              setsWithStories.push({ set, stories: [], loaded: false })
-            }
-          }
+          // Load stories and analytics for all sets in parallel
+          const [setsWithStories, analyticsResults] = await Promise.all([
+            // Stories
+            Promise.all(sets.map(async set => {
+              try {
+                const data = await fetchStorySet(set.id)
+                return { set, stories: data.stories.filter(s => s.status === 'ready'), loaded: true }
+              } catch {
+                return { set, stories: [], loaded: false }
+              }
+            })),
+            // Analytics — best-effort; silently omit on error
+            Promise.all(sets.map(async set => {
+              try {
+                const rows = await fetchAnalytics(set.id)
+                return { id: set.id, rows }
+              } catch {
+                return { id: set.id, rows: [] }
+              }
+            })),
+          ])
+
           setStorySets(setsWithStories)
+
+          const aMap = new Map<number, YoutubeAnalyticRow[]>()
+          analyticsResults.forEach(({ id, rows }) => { if (rows.length) aMap.set(id, rows) })
+          setAnalyticsMap(aMap)
 
           // Auto-expand the latest set
           if (setsWithStories.length > 0) {
@@ -144,6 +195,7 @@ export default function StoriesPage() {
           }
         } else {
           setStorySets([])
+          setAnalyticsMap(new Map())
         }
       } catch (err) {
         console.error('Failed to load stories:', err)
@@ -258,18 +310,16 @@ export default function StoriesPage() {
             const isLatest = isLatestSet(index)
             const isExpanded = expandedSets.has(sw.set.id)
 
-            // English: show only the story whose format matches this tab.
-            // Chinese: show all stories in the set (profile filter already scoped the set).
-            const tab = CHANNEL_TABS.find(t => t.id === activeTab) ?? CHANNEL_TABS[0]
-            const visibleStories = storyLang === 'en'
-              ? sw.stories.filter(s => s.format === tab.enFormat)
-              : sw.stories
+            // Profile filter already scopes the set to the right channel for
+            // both zh and en. English deep stories have format='deep_story'
+            // (not 'format_10x'), so show all stories in the set directly.
+            const visibleStories = sw.stories
 
             return (
               <div key={sw.set.id}>
                 {/* Set header — latest set has no collapse button */}
                 {isLatest ? (
-                  <div className="flex items-center gap-3 px-1 mb-3">
+                  <div className="flex items-center gap-3 flex-wrap px-1 mb-3">
                     <span className="text-sm font-semibold text-primary">
                       {formatSetTime(sw.set.batch_ts)}
                     </span>
@@ -279,6 +329,7 @@ export default function StoriesPage() {
                     <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">
                       最新
                     </span>
+                    <AnalyticsBadge rows={analyticsMap.get(sw.set.id)} />
                   </div>
                 ) : (
                   <SetHeader
@@ -287,6 +338,7 @@ export default function StoriesPage() {
                     expanded={isExpanded}
                     onToggle={() => toggleSet(sw.set.id)}
                     lang={storyLang}
+                    analytics={analyticsMap.get(sw.set.id)}
                   />
                 )}
 
@@ -321,7 +373,7 @@ export default function StoriesPage() {
             <>
               <p className="text-lg mb-1">No stories yet</p>
               <p className="text-sm text-muted-foreground">
-                {`Run: ./run_generate.sh 101-105 --lang en --profile run_en`}
+                {`Run: ./run_generate.sh --deep-story --lang en --profile ${CHANNEL_TABS.find(t => t.id === activeTab)?.profile ?? 'run3_world'}`}
               </p>
             </>
           ) : (

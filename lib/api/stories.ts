@@ -5,7 +5,7 @@
  * Next.js rewrites proxy /api/stories/* to the story_engine backend.
  */
 
-import type { Story, StoriesListResponse, StorySetSummary, StoryLang, FormatType } from '@/types/story'
+import type { Story, StoriesListResponse, StorySetSummary, StoryLang, FormatType, YoutubeAnalyticRow } from '@/types/story'
 
 const STORY_API_BASE = process.env.NEXT_PUBLIC_STORY_API_BASE_URL || '/api'
 
@@ -65,6 +65,15 @@ export async function fetchStorySets(profile?: string, lang?: StoryLang): Promis
  */
 export async function fetchStorySet(setId: number): Promise<StoriesListResponse> {
   return storyFetch<StoriesListResponse>(`/story-sets/${setId}`)
+}
+
+/**
+ * Fetch YouTube Analytics rows for a story set.
+ * Returns one row per published locale (en, zh).
+ * analytics_pulled_at: null = pending, 'no_data' = gave up, ISO string = fetched.
+ */
+export async function fetchAnalytics(setId: number): Promise<YoutubeAnalyticRow[]> {
+  return storyFetch<YoutubeAnalyticRow[]>(`/analytics/story-set/${setId}`)
 }
 
 export async function fetchStories(opts?: {

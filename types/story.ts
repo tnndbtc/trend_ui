@@ -63,6 +63,18 @@ export interface StorySetSummary {
   profile_id?: string | null  // per-run overlay id, e.g. "run2_ai"
 }
 
+export interface YoutubeAnalyticRow {
+  video_id:            string
+  lang:                string           // 'en' | 'zh'
+  locale:              string           // 'en-US' | 'zh-Hans'
+  views:               number | null
+  avg_view_duration:   number | null    // seconds
+  avg_view_pct:        number | null    // %
+  ctr_pct:             number | null    // % — null until channel is monetized
+  published_at:        string | null    // ISO datetime
+  analytics_pulled_at: string | null    // ISO datetime | 'no_data' | null (pending)
+}
+
 export interface EngineStatus {
   scheduler: string
   last_run_at: string | null
