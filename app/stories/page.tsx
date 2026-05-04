@@ -119,23 +119,19 @@ export default function StoriesPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [expandedSets, setExpandedSets] = useState<Set<number>>(new Set())
-  const [activeTab, setActiveTab] = useState<string>('politics')
-  const [storyLang, setStoryLang] = useState<StoryLang>('zh')
-  // Analytics keyed by story_set_id — fetched alongside stories, best-effort
-  const [analyticsMap, setAnalyticsMap] = useState<Map<number, YoutubeAnalyticRow[]>>(new Map())
-
-  // Restore persisted lang preference and initial tab from URL on mount
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    const saved = localStorage.getItem(LANG_STORAGE_KEY) as StoryLang | null
-    if (saved === 'en' || saved === 'zh') setStoryLang(saved)
-
+  const [activeTab, setActiveTab] = useState<string>(() => {
+    if (typeof window === 'undefined') return 'politics'
     const params = new URLSearchParams(window.location.search)
     const tab = params.get('tab')
-    if (tab && CHANNEL_TABS.some(t => t.id === tab)) {
-      setActiveTab(tab)
-    }
-  }, [])
+    return (tab && CHANNEL_TABS.some(t => t.id === tab)) ? tab : 'politics'
+  })
+  const [storyLang, setStoryLang] = useState<StoryLang>(() => {
+    if (typeof window === 'undefined') return 'zh'
+    const saved = localStorage.getItem(LANG_STORAGE_KEY) as StoryLang | null
+    return (saved === 'en' || saved === 'zh') ? saved : 'zh'
+  })
+  // Analytics keyed by story_set_id — fetched alongside stories, best-effort
+  const [analyticsMap, setAnalyticsMap] = useState<Map<number, YoutubeAnalyticRow[]>>(new Map())
 
   const handleLangChange = (lang: StoryLang) => {
     setStoryLang(lang)
@@ -145,6 +141,8 @@ export default function StoriesPage() {
   }
 
   useEffect(() => {
+    let cancelled = false
+
     async function load() {
       try {
         setLoading(true)
@@ -159,6 +157,7 @@ export default function StoriesPage() {
 
         // Fetch story sets filtered by profile + lang
         const sets = await fetchStorySets(profileFilter, storyLang)
+        if (cancelled) return
 
         if (sets.length > 0) {
           // Load stories and analytics for all sets in parallel
@@ -183,6 +182,8 @@ export default function StoriesPage() {
             })),
           ])
 
+          if (cancelled) return
+
           setStorySets(setsWithStories)
 
           const aMap = new Map<number, YoutubeAnalyticRow[]>()
@@ -198,13 +199,15 @@ export default function StoriesPage() {
           setAnalyticsMap(new Map())
         }
       } catch (err) {
+        if (cancelled) return
         console.error('Failed to load stories:', err)
         setError('无法加载故事，请检查 story_engine 是否运行中')
       } finally {
-        setLoading(false)
+        if (!cancelled) setLoading(false)
       }
     }
     load()
+    return () => { cancelled = true }
   }, [activeTab, storyLang])
 
   const handleTabClick = (tabId: string) => {
