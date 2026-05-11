@@ -32,6 +32,26 @@ const nextConfig = {
         destination: 'http://127.0.0.1:8003/api/analytics/:path*',
         basePath: false,
       },
+      {
+        source: '/api/subscribers/refresh',
+        destination: 'http://127.0.0.1:8003/api/subscribers/refresh',
+        basePath: false,
+      },
+      {
+        source: '/api/subscribers',
+        destination: 'http://127.0.0.1:8003/api/subscribers',
+        basePath: false,
+      },
+      {
+        source: '/api/comments/refresh',
+        destination: 'http://127.0.0.1:8003/api/comments/refresh',
+        basePath: false,
+      },
+      {
+        source: '/api/comments',
+        destination: 'http://127.0.0.1:8003/api/comments',
+        basePath: false,
+      },
     ]
   },
 }

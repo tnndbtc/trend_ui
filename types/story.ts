@@ -75,6 +75,53 @@ export interface YoutubeAnalyticRow {
   analytics_pulled_at: string | null    // ISO datetime | 'no_data' | null (pending)
 }
 
+export interface YoutubeSubscriberPlaylist {
+  id:         string
+  title:      string
+  item_count: number
+  created_at: string | null
+}
+
+export interface YoutubeSubscribedChannel {
+  profile:       string          // e.g. "en" | "zh"
+  channel_id:    string          // our YouTube channel ID
+  channel_name:  string          // our channel's display name
+  subscribed_at: string | null   // ISO datetime when they subscribed
+}
+
+export interface YoutubeSubscriber {
+  channel_id:       string
+  display_name:     string
+  description:      string | null
+  country:          string | null
+  account_created:  string | null
+  subscriber_count: number | null
+  video_count:      number | null
+  view_count:       number | null
+  subscribed_to:    YoutubeSubscribedChannel[]
+  public_playlists: YoutubeSubscriberPlaylist[]
+  fetched_at:       string | null
+}
+
+export interface VideoComment {
+  comment_id:        string
+  author_name:       string | null
+  author_channel_id: string | null
+  text:              string
+  like_count:        number
+  published_at:      string | null
+}
+
+export interface StoryWithComments {
+  video_id:       string
+  lang:           string
+  upload_profile: string
+  story_set_id:   number | null
+  story_title:    string | null
+  published_at:   string | null
+  comments:       VideoComment[]
+}
+
 export interface EngineStatus {
   scheduler: string
   last_run_at: string | null

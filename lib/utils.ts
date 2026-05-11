@@ -60,6 +60,7 @@ export function getBucketName(bucket: string): string {
     category_lifestyle: 'Lifestyle',
     category_science: 'Science',
     category_politics: 'Politics',
+    category_crypto: 'Crypto',
     region_local: 'Region Local',
     evergreen: 'Evergreen',
   }

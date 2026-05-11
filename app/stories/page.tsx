@@ -28,6 +28,7 @@ const CHANNEL_TABS: ChannelTab[] = [
   { id: 'business',      label: '商业·财经', profile: 'run4_business',      description: 'Business / Finance'     },
   { id: 'entertainment', label: '娱乐·体育', profile: 'run5_entertainment', description: 'Entertainment / Sports' },
   { id: 'others',        label: '社会·世界', profile: 'run6_others',        description: 'Society / World'        },
+  { id: 'crypto',        label: '加密货币',  profile: 'run7_crypto',        description: 'Crypto / Blockchain'    },
 ]
 
 /** Format a single analytics row into a short readable string. */

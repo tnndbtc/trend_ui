@@ -40,6 +40,18 @@ export default function RootLayout({
                 >
                   Stories
                 </a>
+                <a
+                  href="/app/subscribers"
+                  className="px-3 py-1.5 text-sm font-medium rounded-md hover:bg-muted transition-colors text-foreground/70 hover:text-foreground"
+                >
+                  Subscribers
+                </a>
+                <a
+                  href="/app/comments"
+                  className="px-3 py-1.5 text-sm font-medium rounded-md hover:bg-muted transition-colors text-foreground/70 hover:text-foreground"
+                >
+                  Comments
+                </a>
               </nav>
             </div>
           </header>

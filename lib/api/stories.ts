@@ -5,7 +5,7 @@
  * Next.js rewrites proxy /api/stories/* to the story_engine backend.
  */
 
-import type { Story, StoriesListResponse, StorySetSummary, StoryLang, FormatType, YoutubeAnalyticRow } from '@/types/story'
+import type { Story, StoriesListResponse, StorySetSummary, StoryLang, FormatType, YoutubeAnalyticRow, YoutubeSubscriber, StoryWithComments } from '@/types/story'
 
 const STORY_API_BASE = process.env.NEXT_PUBLIC_STORY_API_BASE_URL || '/api'
 
@@ -74,6 +74,22 @@ export async function fetchStorySet(setId: number): Promise<StoriesListResponse>
  */
 export async function fetchAnalytics(setId: number): Promise<YoutubeAnalyticRow[]> {
   return storyFetch<YoutubeAnalyticRow[]>(`/analytics/story-set/${setId}`)
+}
+
+/**
+ * Fetch all public subscribers from the DB (populated by fetch_subscribers.py).
+ * Only subscribers with public YouTube subscriptions are returned.
+ */
+export async function fetchSubscribers(): Promise<YoutubeSubscriber[]> {
+  return storyFetch<YoutubeSubscriber[]>('/subscribers')
+}
+
+/**
+ * Fetch all published stories that have viewer comments.
+ * Populated by fetch_video_comments.py.
+ */
+export async function fetchVideoComments(): Promise<StoryWithComments[]> {
+  return storyFetch<StoryWithComments[]>('/comments')
 }
 
 export async function fetchStories(opts?: {

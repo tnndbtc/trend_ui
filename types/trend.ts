@@ -70,6 +70,7 @@ export type Bucket =
   | 'category_lifestyle'
   | 'category_science'
   | 'category_politics'
+  | 'category_crypto'
   | 'region_local'
   | 'evergreen'
 
