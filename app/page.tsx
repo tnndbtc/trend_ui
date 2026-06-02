@@ -11,12 +11,21 @@ import { FiltersBar } from '@/components/FiltersBar'
 import { LoadingCard } from '@/components/LoadingCard'
 import { EmptyState } from '@/components/EmptyState'
 import { CaughtUpState } from '@/components/CaughtUpState'
+import { getPreferredLanguage, saveLanguagePreference } from '@/lib/storage'
 
 // Threshold for switching to virtualized rendering
 const VIRTUALIZATION_THRESHOLD = 500
 
 export default function FeedPage() {
-  const [language, setLanguage] = useState<Language>('zh-Hans')
+  // Initialise from saved preference → browser locale → 'zh-Hans' fallback.
+  // Lazy initialiser runs on the client, so navigator is safe to access.
+  const [language, setLanguage] = useState<Language>(() => getPreferredLanguage())
+
+  // Wrap the setter so language changes are also persisted to localStorage.
+  const handleLanguageChange = useCallback((lang: Language) => {
+    saveLanguagePreference(lang)
+    setLanguage(lang)
+  }, [])
   const [feedStartTime, setFeedStartTime] = useState<Date>(new Date())
 
   // Menu actions (dismiss, hide source)
@@ -112,7 +121,7 @@ export default function FeedPage() {
     <div className="min-h-screen bg-background">
       {/* Sticky Header */}
       <div className="sticky top-0 z-50">
-        <FiltersBar language={language} onLanguageChange={setLanguage} />
+        <FiltersBar language={language} onLanguageChange={handleLanguageChange} />
       </div>
 
       {/* Feed */}

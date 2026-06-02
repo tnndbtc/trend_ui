@@ -1,4 +1,42 @@
-const CLIENT_ID_KEY = 'trend_ui_client_id'
+const CLIENT_ID_KEY   = 'trend_ui_client_id'
+const LANGUAGE_KEY    = 'trend_ui_language'
+
+// ── Language preference ────────────────────────────────────────────────────────
+
+/**
+ * Detect the user's preferred language from localStorage (saved preference)
+ * or browser locale (navigator.language).
+ *
+ * Mapping:
+ *   zh-* (any Chinese locale)  → 'zh-Hans'
+ *   everything else            → 'en-US'
+ *
+ * Returns 'zh-Hans' as SSR fallback when window is not available.
+ */
+export function getPreferredLanguage(): 'en-US' | 'zh-Hans' {
+  if (typeof window === 'undefined') return 'zh-Hans'  // SSR fallback
+
+  // 1. Honour saved user preference (manual language switch)
+  try {
+    const saved = localStorage.getItem(LANGUAGE_KEY)
+    if (saved === 'en-US' || saved === 'zh-Hans') return saved
+  } catch { /* localStorage blocked */ }
+
+  // 2. Detect from browser locale
+  const lang = (navigator.language || '').toLowerCase()
+  return lang.startsWith('zh') ? 'zh-Hans' : 'en-US'
+}
+
+/**
+ * Persist the user's language choice to localStorage so the next visit
+ * uses the same language without needing to re-detect.
+ */
+export function saveLanguagePreference(lang: 'en-US' | 'zh-Hans'): void {
+  if (typeof window === 'undefined') return
+  try {
+    localStorage.setItem(LANGUAGE_KEY, lang)
+  } catch { /* localStorage blocked */ }
+}
 
 /**
  * Generate a UUID v4

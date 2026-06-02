@@ -5,7 +5,7 @@
  * Next.js rewrites proxy /api/stories/* to the story_engine backend.
  */
 
-import type { Story, StoriesListResponse, StorySetSummary, StoryLang, FormatType, YoutubeAnalyticRow, YoutubeSubscriber, StoryWithComments } from '@/types/story'
+import type { Story, StoriesListResponse, StorySetSummary, StoryLang, FormatType, YoutubeAnalyticRow, YoutubeSubscriber, StoryWithComments, GamesChannelStats, GamesVideoRow, GamesCountryRow, GamesSubtitleRow, ChannelVideoRow, StrategyChange } from '@/types/story'
 
 const STORY_API_BASE = process.env.NEXT_PUBLIC_STORY_API_BASE_URL || '/api'
 
@@ -90,6 +90,57 @@ export async function fetchSubscribers(): Promise<YoutubeSubscriber[]> {
  */
 export async function fetchVideoComments(): Promise<StoryWithComments[]> {
   return storyFetch<StoryWithComments[]>('/comments')
+}
+
+/**
+ * Fetch KataGo channel-level stats (subscribers, total views, video count).
+ * Populated by fetch_games_analytics.py.
+ */
+export async function fetchGamesChannelStats(): Promise<GamesChannelStats> {
+  return storyFetch<GamesChannelStats>('/games/channel-stats')
+}
+
+/**
+ * Fetch all published KataGo videos with per-video stats (views, likes, comments).
+ * Populated by fetch_games_analytics.py.
+ */
+export async function fetchGamesVideos(): Promise<GamesVideoRow[]> {
+  return storyFetch<GamesVideoRow[]>('/games/videos')
+}
+
+/**
+ * Fetch lifetime viewer counts by country for the KataGo channel, sorted by views DESC.
+ * Populated by fetch_games_analytics.py (requires yt-analytics.readonly scope).
+ */
+export async function fetchGamesAudienceCountries(): Promise<GamesCountryRow[]> {
+  return storyFetch<GamesCountryRow[]>('/games/audience-countries')
+}
+
+export async function fetchGamesSubtitleLangs(): Promise<GamesSubtitleRow[]> {
+  return storyFetch<GamesSubtitleRow[]>('/games/subtitle-langs')
+}
+
+/**
+ * Fetch all published deep-story videos for the EN or ZH channel,
+ * newest first, with analytics data and story title.
+ */
+export async function fetchChannelVideos(lang: 'en' | 'zh'): Promise<ChannelVideoRow[]> {
+  return storyFetch<ChannelVideoRow[]>(`/analytics/channel?lang=${lang}`)
+}
+
+export async function fetchStrategyChanges(): Promise<StrategyChange[]> {
+  return storyFetch<StrategyChange[]>('/analytics/strategy-changes')
+}
+
+/**
+ * Trigger a background refresh of YouTube Analytics for all eligible
+ * deep-story videos (EN + ZH). Returns immediately; poll fetchChannelVideos
+ * after ~20s to get updated data.
+ */
+export async function refreshChannelAnalytics(): Promise<{ status: string }> {
+  const response = await fetch(`${STORY_API_BASE}/analytics/refresh`, { method: 'POST' })
+  if (!response.ok) throw new Error(`Analytics refresh error: ${response.status}`)
+  return response.json()
 }
 
 export async function fetchStories(opts?: {

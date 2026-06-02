@@ -130,3 +130,73 @@ export interface EngineStatus {
   crawler_db_path: string
   crawler_db_reachable: boolean
 }
+
+// ── Games / KataGo channel analytics ─────────────────────────────────────────
+
+export interface GamesChannelStats {
+  channel_id:            string
+  channel_name:          string | null
+  subscriber_count:      number | null   // 0 when hidden by YouTube (<1K)
+  real_subscriber_count: number | null   // exact count via Analytics API
+  video_count:           number | null
+  view_count:            number | null
+  fetched_at:            string | null
+}
+
+export interface GamesComment {
+  comment_id:        string
+  author_name:       string | null
+  author_channel_id: string | null
+  text:              string
+  like_count:        number
+  published_at:      string | null
+}
+
+export interface GamesVideoRow {
+  video_id:          string
+  title:             string | null
+  published_at:      string | null
+  views:             number | null
+  likes:             number | null
+  comment_count:     number | null
+  avg_view_duration: number | null   // seconds
+  avg_view_pct:      number | null   // %
+  fetched_at:        string | null
+  comments:          GamesComment[]
+}
+
+export interface GamesCountryRow {
+  country:    string   // ISO 3166-1 alpha-2
+  views:      number
+  fetched_at: string | null
+}
+
+export interface GamesSubtitleRow {
+  lang:       string   // e.g. "zh-Hans", "en", "" = subtitles off
+  views:      number
+  fetched_at: string | null
+}
+
+// ---------------------------------------------------------------------------
+// Story-engine channel analytics  (GET /api/analytics/channel?lang=en|zh)
+// ---------------------------------------------------------------------------
+
+export interface ChannelVideoRow {
+  video_id:            string
+  lang:                string            // 'en' | 'zh'
+  story_set_id:        number | null
+  title:               string | null     // from hierarchical_stories deep_story $.title
+  profile_id:          string | null     // run2_ai | run3_world | …
+  published_at:        string | null     // ISO datetime
+  views:               number | null
+  avg_view_duration:   number | null     // seconds
+  avg_view_pct:        number | null     // %
+  like_count:          number | null
+  comment_count:       number | null
+  analytics_pulled_at: string | null     // null=pending, 'no_data'=gave up, ISO=fetched
+}
+
+export interface StrategyChange {
+  date:  string   // "YYYY-MM-DD"
+  label: string   // e.g. "策略B（新选题策略）"
+}

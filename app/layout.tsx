@@ -52,6 +52,18 @@ export default function RootLayout({
                 >
                   Comments
                 </a>
+                <a
+                  href="/app/performance"
+                  className="px-3 py-1.5 text-sm font-medium rounded-md hover:bg-muted transition-colors text-foreground/70 hover:text-foreground"
+                >
+                  📊 Performance
+                </a>
+                <a
+                  href="/app/games"
+                  className="px-3 py-1.5 text-sm font-medium rounded-md hover:bg-muted transition-colors text-foreground/70 hover:text-foreground"
+                >
+                  ♟ KataGo
+                </a>
               </nav>
             </div>
           </header>

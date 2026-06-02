@@ -52,6 +52,16 @@ const nextConfig = {
         destination: 'http://127.0.0.1:8003/api/comments',
         basePath: false,
       },
+      {
+        source: '/api/games/refresh',
+        destination: 'http://127.0.0.1:8003/api/games/refresh',
+        basePath: false,
+      },
+      {
+        source: '/api/games/:path*',
+        destination: 'http://127.0.0.1:8003/api/games/:path*',
+        basePath: false,
+      },
     ]
   },
 }
