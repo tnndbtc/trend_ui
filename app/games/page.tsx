@@ -4,11 +4,13 @@ import { useEffect, useState, useMemo } from 'react'
 import { fetchGamesChannelStats, fetchGamesVideos, fetchGamesAudienceCountries, fetchGamesSubtitleLangs } from '@/lib/api/stories'
 import type { GamesChannelStats, GamesVideoRow, GamesComment, GamesCountryRow, GamesSubtitleRow } from '@/types/story'
 
-type GamesLang = 'en' | 'zh'
+type GamesTab = 'en' | 'zh' | 'famous-en' | 'famous-zh'
 
-const PLAYLIST_LABELS: Record<GamesLang, { label: string; playlist: string }> = {
-  en: { label: 'KataGo',     playlist: 'PL5Xv3qmUSUqUrG-NTMe2IjNP_aHcI2m-w' },
-  zh: { label: 'Go Chinese', playlist: 'PL5Xv3qmUSUqWDllUJi9BEP_3basoWCHv0' },
+const TAB_META: Record<GamesTab, { label: string; playlist?: string; emoji: string }> = {
+  'en':        { label: 'KataGo',        emoji: '♟',  playlist: 'PL5Xv3qmUSUqUrG-NTMe2IjNP_aHcI2m-w' },
+  'zh':        { label: 'Go Chinese',    emoji: '围棋', playlist: 'PL5Xv3qmUSUqWDllUJi9BEP_3basoWCHv0' },
+  'famous-en': { label: 'Famous EN',     emoji: '🏆' },
+  'famous-zh': { label: 'Famous ZH',     emoji: '🏆' },
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -20,7 +22,6 @@ function fmt(n: number | null | undefined): string {
   return n.toLocaleString()
 }
 
-/** Format seconds as "1m 23s" or "45s" */
 function fmtDuration(secs: number | null | undefined): string {
   if (secs === null || secs === undefined) return '—'
   const s = Math.round(secs)
@@ -43,15 +44,12 @@ function fmtTime(iso: string | null | undefined): string {
   })
 }
 
-/** Convert ISO 3166-1 alpha-2 code to flag emoji (e.g. "TW" → "🇹🇼"). */
 function countryFlag(code: string): string {
-  // Regional indicator offset: 'A'=0x41, 🇦=0x1F1E6, delta=0x1F1A5
   return code.toUpperCase().replace(/[A-Z]/g, c =>
     String.fromCodePoint(c.charCodeAt(0) + 0x1F1A5)
   )
 }
 
-/** Human-readable country name (best-effort via Intl.DisplayNames, fallback to code). */
 function countryName(code: string): string {
   try {
     return new Intl.DisplayNames(['en'], { type: 'region' }).of(code) ?? code
@@ -65,7 +63,7 @@ function countryName(code: string): string {
 function AudienceMap({ rows }: { rows: GamesCountryRow[] }) {
   if (rows.length === 0) return null
   const totalViews = rows.reduce((s, r) => s + r.views, 0)
-  const display    = rows.slice(0, 15)   // top-15 countries
+  const display    = rows.slice(0, 15)
   return (
     <div className="rounded-xl border bg-card p-4 mb-6">
       <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-3">
@@ -80,7 +78,6 @@ function AudienceMap({ rows }: { rows: GamesCountryRow[] }) {
               <span className="w-24 text-muted-foreground truncate" title={countryName(r.country)}>
                 {countryName(r.country)}
               </span>
-              {/* bar */}
               <div className="flex-1 bg-muted rounded-full h-1.5 overflow-hidden">
                 <div
                   className="bg-primary h-full rounded-full"
@@ -169,7 +166,6 @@ function CommentThread({ comments }: { comments: GamesComment[] }) {
           : undefined
         return (
           <div key={c.comment_id} className="flex gap-3">
-            {/* avatar */}
             <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center text-xs font-semibold text-muted-foreground flex-shrink-0 select-none">
               {c.author_name?.charAt(0).toUpperCase() ?? '?'}
             </div>
@@ -204,17 +200,13 @@ function VideoCard({ video }: { video: GamesVideoRow }) {
   const ytUrl = `https://www.youtube.com/watch?v=${video.video_id}`
   const hasComments = (video.comments?.length ?? 0) > 0
 
-  // Auto-expand if there are comments
   useEffect(() => {
     if (hasComments) setExpanded(true)
   }, [hasComments])
 
   return (
     <div className="rounded-xl border bg-card overflow-hidden">
-      {/* ── main row ── */}
       <div className="px-4 py-3 flex items-start gap-3">
-
-        {/* thumbnail */}
         <a href={ytUrl} target="_blank" rel="noopener noreferrer"
            className="flex-shrink-0 w-32 h-[72px] rounded-md overflow-hidden bg-muted hover:opacity-80 transition-opacity">
           <img
@@ -224,14 +216,12 @@ function VideoCard({ video }: { video: GamesVideoRow }) {
           />
         </a>
 
-        {/* title + meta */}
         <div className="flex-1 min-w-0">
           <a href={ytUrl} target="_blank" rel="noopener noreferrer"
              className="text-sm font-semibold hover:underline leading-snug line-clamp-2 block mb-1.5">
             {video.title ?? video.video_id}
           </a>
 
-          {/* stat pills row */}
           <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
             <span className="text-foreground/60">{fmtTime(video.published_at)}</span>
 
@@ -239,7 +229,6 @@ function VideoCard({ video }: { video: GamesVideoRow }) {
               👁 <span className="font-medium text-foreground">{fmt(video.views)}</span>
             </span>
 
-            {/* avg watch duration */}
             <span title="Average watch time">
               ⏱ <span className={`font-medium ${
                 video.avg_view_duration != null ? 'text-foreground' : 'text-muted-foreground'
@@ -248,7 +237,6 @@ function VideoCard({ video }: { video: GamesVideoRow }) {
               </span>
             </span>
 
-            {/* retention % */}
             <span title="Average view percentage (retention)">
               📊 <span className={`font-medium ${
                 video.avg_view_pct == null          ? 'text-muted-foreground' :
@@ -260,14 +248,12 @@ function VideoCard({ video }: { video: GamesVideoRow }) {
               </span>
             </span>
 
-            {/* likes — count only; individual likers not available via YouTube API */}
             {(video.likes ?? 0) > 0 && (
-              <span title="Likes (YouTube does not expose who liked)">
+              <span title="Likes">
                 👍 <span className="font-medium text-foreground">{fmt(video.likes)}</span>
               </span>
             )}
 
-            {/* comments toggle */}
             {hasComments && (
               <button
                 onClick={() => setExpanded(e => !e)}
@@ -284,8 +270,88 @@ function VideoCard({ video }: { video: GamesVideoRow }) {
         </div>
       </div>
 
-      {/* ── comment thread (collapsible) ── */}
       {expanded && hasComments && <CommentThread comments={video.comments} />}
+    </div>
+  )
+}
+
+// ── Famous tab: side-by-side male / female columns ────────────────────────────
+
+function FamousSideBySide({
+  videos,
+  lang,
+}: {
+  videos: GamesVideoRow[]
+  lang: 'famous-en' | 'famous-zh'
+}) {
+  const isZh = lang === 'famous-zh'
+
+  // Split by ab_variant; videos with null ab_variant go to a separate "unpaired" list
+  const maleVideos    = videos.filter(v => v.ab_variant?.startsWith('male'))
+  const femaleVideos  = videos.filter(v => v.ab_variant?.startsWith('female'))
+  const unpairedVideos = videos.filter(v => !v.ab_variant)
+
+  const hasPaired = maleVideos.length > 0 || femaleVideos.length > 0
+
+  if (videos.length === 0) {
+    return (
+      <div className="rounded-xl border border-dashed p-10 text-center text-muted-foreground">
+        <p className="text-4xl mb-3">🏆</p>
+        <p className="font-medium">No {isZh ? 'Chinese' : 'English'} famous games yet</p>
+        <p className="text-sm mt-1">Run the famous game pipeline to populate this tab.</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      {hasPaired && (
+        <>
+          {/* Column header */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide px-1 flex items-center gap-1.5">
+              🎙 {isZh ? '男声 (Male)' : 'Male Voice'}
+              <span className="text-muted-foreground/60">· {maleVideos.length}</span>
+            </div>
+            <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide px-1 flex items-center gap-1.5">
+              🎙 {isZh ? '女声 (Female)' : 'Female Voice'}
+              <span className="text-muted-foreground/60">· {femaleVideos.length}</span>
+            </div>
+          </div>
+
+          {/* Paired rows — zip by index (both columns sorted newest-first) */}
+          {Array.from({ length: Math.max(maleVideos.length, femaleVideos.length) }).map((_, i) => (
+            <div key={i} className="grid grid-cols-2 gap-3 items-start">
+              <div>
+                {maleVideos[i]
+                  ? <VideoCard video={maleVideos[i]} />
+                  : <div className="rounded-xl border border-dashed h-[90px] flex items-center justify-center text-xs text-muted-foreground">—</div>
+                }
+              </div>
+              <div>
+                {femaleVideos[i]
+                  ? <VideoCard video={femaleVideos[i]} />
+                  : <div className="rounded-xl border border-dashed h-[90px] flex items-center justify-center text-xs text-muted-foreground">—</div>
+                }
+              </div>
+            </div>
+          ))}
+        </>
+      )}
+
+      {/* Unpaired videos (ab_variant = null) — show normally */}
+      {unpairedVideos.length > 0 && (
+        <>
+          {hasPaired && (
+            <p className="text-xs text-muted-foreground border-t pt-4">
+              ℹ️ {unpairedVideos.length} video{unpairedVideos.length !== 1 ? 's' : ''} without voice variant data
+            </p>
+          )}
+          <div className="flex flex-col gap-3">
+            {unpairedVideos.map(v => <VideoCard key={v.video_id} video={v} />)}
+          </div>
+        </>
+      )}
     </div>
   )
 }
@@ -300,7 +366,7 @@ export default function GamesPage() {
   const [loading, setLoading]       = useState(true)
   const [error, setError]           = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
-  const [activeLang, setActiveLang] = useState<GamesLang>('en')
+  const [activeTab, setActiveTab]   = useState<GamesTab>('en')
 
   function load() {
     return Promise.all([
@@ -331,12 +397,23 @@ export default function GamesPage() {
     }
   }
 
-  // Filter videos by active playlist tab. Treat null lang (pre-migration rows) as 'en'.
-  const filteredVideos = useMemo(
-    () => videos.filter(v => (v.lang ?? 'en') === activeLang),
-    [videos, activeLang],
-  )
+  // ── filtered video sets ────────────────────────────────────────────────────
 
+  const selfplayEn  = useMemo(() => videos.filter(v => (v.lang ?? 'en') === 'en' && !v.is_famous), [videos])
+  const selfplayZh  = useMemo(() => videos.filter(v => v.lang === 'zh' && !v.is_famous), [videos])
+  const famousEn    = useMemo(() => videos.filter(v => v.is_famous && (v.lang ?? 'en') === 'en'), [videos])
+  const famousZh    = useMemo(() => videos.filter(v => v.is_famous && v.lang === 'zh'), [videos])
+
+  const tabVideos: Record<GamesTab, GamesVideoRow[]> = {
+    'en':        selfplayEn,
+    'zh':        selfplayZh,
+    'famous-en': famousEn,
+    'famous-zh': famousZh,
+  }
+
+  const filteredVideos = tabVideos[activeTab]
+
+  // Stat cards (only shown for selfplay tabs)
   const totalViews    = filteredVideos.reduce((s, v) => s + (v.views    ?? 0), 0)
   const totalComments = filteredVideos.reduce((s, v) => s + (v.comments?.length ?? 0), 0)
   const totalLikes    = filteredVideos.reduce((s, v) => s + (v.likes    ?? 0), 0)
@@ -344,6 +421,8 @@ export default function GamesPage() {
   const avgRetention = videosWithRetention.length > 0
     ? videosWithRetention.reduce((s, v) => s + (v.avg_view_pct ?? 0), 0) / videosWithRetention.length
     : null
+
+  const isFamousTab = activeTab === 'famous-en' || activeTab === 'famous-zh'
 
   return (
     <div className="container max-w-3xl mx-auto px-4 py-8">
@@ -384,35 +463,65 @@ export default function GamesPage() {
         </button>
       </div>
 
-      {/* ── KataGo / Go Chinese playlist tabs ── */}
+      {/* ── tabs ── */}
       <div className="flex gap-1 mb-6 border-b">
-        {(['en', 'zh'] as GamesLang[]).map(lang => {
-          const pl    = PLAYLIST_LABELS[lang]
-          const count = videos.filter(v => (v.lang ?? 'en') === lang).length
+        {/* Self-play tabs */}
+        {(['en', 'zh'] as GamesTab[]).map(tab => {
+          const meta  = TAB_META[tab]
+          const count = tabVideos[tab].length
           return (
             <button
-              key={lang}
-              onClick={() => setActiveLang(lang)}
-              className={`px-5 py-2 text-sm font-medium border-b-2 transition-colors -mb-px ${
-                activeLang === lang
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors -mb-px ${
+                activeTab === tab
                   ? 'border-foreground text-foreground'
                   : 'border-transparent text-muted-foreground hover:text-foreground'
               }`}
             >
-              {pl.label}
+              {meta.label}
               {!loading && count > 0 && (
                 <span className="ml-1.5 text-xs text-muted-foreground">({count})</span>
               )}
             </button>
           )
         })}
-        <a
-          href={`https://www.youtube.com/playlist?list=${PLAYLIST_LABELS[activeLang].playlist}`}
-          target="_blank" rel="noopener noreferrer"
-          className="ml-auto self-center text-xs text-muted-foreground hover:text-foreground transition-colors pb-2"
-        >
-          ↗ playlist
-        </a>
+
+        {/* Divider */}
+        <div className="w-px bg-border mx-1 self-stretch my-1" />
+
+        {/* Famous tabs */}
+        {(['famous-en', 'famous-zh'] as GamesTab[]).map(tab => {
+          const meta  = TAB_META[tab]
+          const count = tabVideos[tab].length
+          return (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors -mb-px ${
+                activeTab === tab
+                  ? 'border-amber-500 text-foreground'
+                  : 'border-transparent text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {meta.emoji} {meta.label}
+              {!loading && count > 0 && (
+                <span className="ml-1.5 text-xs text-muted-foreground">({count})</span>
+              )}
+            </button>
+          )
+        })}
+
+        {/* Playlist link (only for selfplay tabs) */}
+        {!isFamousTab && TAB_META[activeTab].playlist && (
+          <a
+            href={`https://www.youtube.com/playlist?list=${TAB_META[activeTab].playlist}`}
+            target="_blank" rel="noopener noreferrer"
+            className="ml-auto self-center text-xs text-muted-foreground hover:text-foreground transition-colors pb-2"
+          >
+            ↗ playlist
+          </a>
+        )}
       </div>
 
       {/* ── loading ── */}
@@ -429,7 +538,7 @@ export default function GamesPage() {
 
       {!loading && (
         <>
-          {/* ── stat cards (per active playlist) ── */}
+          {/* ── stat cards ── */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
             <StatCard
               label="Subscribers"
@@ -445,7 +554,9 @@ export default function GamesPage() {
             <StatCard
               label="Videos"
               value={fmt(filteredVideos.length)}
-              sub={`${PLAYLIST_LABELS[activeLang].label} playlist`}
+              sub={isFamousTab
+                ? `${TAB_META[activeTab].label} famous`
+                : `${TAB_META[activeTab].label} self-play`}
             />
             <StatCard
               label="Total views"
@@ -460,44 +571,49 @@ export default function GamesPage() {
             />
           </div>
 
-          {/* ── viewer country breakdown ── */}
-          {countries.length > 0 && <AudienceMap rows={countries} />}
+          {/* ── viewer country + subtitle (only on selfplay tabs to avoid clutter) ── */}
+          {!isFamousTab && countries.length > 0 && <AudienceMap rows={countries} />}
+          {!isFamousTab && <SubtitleLangChart rows={subtitles} />}
 
-          {/* ── CC / subtitle language breakdown ── */}
-          <SubtitleLangChart rows={subtitles} />
-
-          {/* ── notices ── */}
-          <div className="space-y-2 mb-6">
-            <div className="rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-900/40 dark:bg-blue-950/20 px-4 py-2.5 text-sm text-blue-800 dark:text-blue-300">
-              <span className="font-medium">⏱ Watch time & retention</span>
-              {' '}appear after each video is 72h old (YouTube Analytics API latency).
-              {videosWithRetention.length === 0 && (
-                <span className="ml-1">
-                  Make sure the{' '}
-                  <a
-                    href="https://console.developers.google.com/apis/api/youtubeanalytics.googleapis.com/overview?project=933602205414"
-                    target="_blank" rel="noopener noreferrer"
-                    className="underline font-medium"
-                  >
-                    YouTube Analytics API is enabled
-                  </a>.
-                </span>
-              )}
+          {/* ── notices (selfplay only) ── */}
+          {!isFamousTab && (
+            <div className="space-y-2 mb-6">
+              <div className="rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-900/40 dark:bg-blue-950/20 px-4 py-2.5 text-sm text-blue-800 dark:text-blue-300">
+                <span className="font-medium">⏱ Watch time & retention</span>
+                {' '}appear after each video is 72h old (YouTube Analytics API latency).
+                {videosWithRetention.length === 0 && (
+                  <span className="ml-1">
+                    Make sure the{' '}
+                    <a
+                      href="https://console.developers.google.com/apis/api/youtubeanalytics.googleapis.com/overview?project=933602205414"
+                      target="_blank" rel="noopener noreferrer"
+                      className="underline font-medium"
+                    >
+                      YouTube Analytics API is enabled
+                    </a>.
+                  </span>
+                )}
+              </div>
+              <div className="rounded-lg border border-muted px-4 py-2.5 text-xs text-muted-foreground">
+                👍 <span className="font-medium">Likes: {fmt(totalLikes)} total</span>
+                {' '}· YouTube removed the API for seeing <em>who</em> liked a video in 2021 — only the count is available.
+                {' '}💬 <span className="font-medium">{totalComments} comment{totalComments !== 1 ? 's' : ''}</span>
+                {' '}fetched so far.
+              </div>
             </div>
-            <div className="rounded-lg border border-muted px-4 py-2.5 text-xs text-muted-foreground">
-              👍 <span className="font-medium">Likes: {fmt(totalLikes)} total</span>
-              {' '}· YouTube removed the API for seeing <em>who</em> liked a video in 2021 — only the count is available.
-              {' '}💬 <span className="font-medium">{totalComments} comment{totalComments !== 1 ? 's' : ''}</span>
-              {' '}fetched so far.
-            </div>
-          </div>
+          )}
 
-          {/* ── video cards (filtered by active playlist tab) ── */}
-          {filteredVideos.length === 0 ? (
+          {/* ── video list ── */}
+          {isFamousTab ? (
+            <FamousSideBySide
+              videos={filteredVideos}
+              lang={activeTab as 'famous-en' | 'famous-zh'}
+            />
+          ) : filteredVideos.length === 0 ? (
             <div className="rounded-xl border border-dashed p-10 text-center text-muted-foreground">
               <p className="text-4xl mb-3">🎬</p>
               <p className="font-medium">
-                {videos.length === 0 ? 'No video data yet' : `No ${PLAYLIST_LABELS[activeLang].label} videos yet`}
+                {videos.length === 0 ? 'No video data yet' : `No ${TAB_META[activeTab].label} videos yet`}
               </p>
               {videos.length === 0 && (
                 <p className="text-sm mt-1">
