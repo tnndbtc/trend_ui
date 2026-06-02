@@ -1,8 +1,15 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { fetchGamesChannelStats, fetchGamesVideos, fetchGamesAudienceCountries, fetchGamesSubtitleLangs } from '@/lib/api/stories'
 import type { GamesChannelStats, GamesVideoRow, GamesComment, GamesCountryRow, GamesSubtitleRow } from '@/types/story'
+
+type GamesLang = 'en' | 'zh'
+
+const PLAYLIST_LABELS: Record<GamesLang, { label: string; playlist: string }> = {
+  en: { label: 'KataGo',     playlist: 'PL5Xv3qmUSUqUrG-NTMe2IjNP_aHcI2m-w' },
+  zh: { label: 'Go Chinese', playlist: 'PL5Xv3qmUSUqWDllUJi9BEP_3basoWCHv0' },
+}
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -293,6 +300,7 @@ export default function GamesPage() {
   const [loading, setLoading]       = useState(true)
   const [error, setError]           = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
+  const [activeLang, setActiveLang] = useState<GamesLang>('en')
 
   function load() {
     return Promise.all([
@@ -323,10 +331,16 @@ export default function GamesPage() {
     }
   }
 
-  const totalViews    = videos.reduce((s, v) => s + (v.views    ?? 0), 0)
-  const totalComments = videos.reduce((s, v) => s + (v.comments?.length ?? 0), 0)
-  const totalLikes    = videos.reduce((s, v) => s + (v.likes    ?? 0), 0)
-  const videosWithRetention = videos.filter(v => v.avg_view_pct != null)
+  // Filter videos by active playlist tab. Treat null lang (pre-migration rows) as 'en'.
+  const filteredVideos = useMemo(
+    () => videos.filter(v => (v.lang ?? 'en') === activeLang),
+    [videos, activeLang],
+  )
+
+  const totalViews    = filteredVideos.reduce((s, v) => s + (v.views    ?? 0), 0)
+  const totalComments = filteredVideos.reduce((s, v) => s + (v.comments?.length ?? 0), 0)
+  const totalLikes    = filteredVideos.reduce((s, v) => s + (v.likes    ?? 0), 0)
+  const videosWithRetention = filteredVideos.filter(v => v.avg_view_pct != null)
   const avgRetention = videosWithRetention.length > 0
     ? videosWithRetention.reduce((s, v) => s + (v.avg_view_pct ?? 0), 0) / videosWithRetention.length
     : null
@@ -370,6 +384,37 @@ export default function GamesPage() {
         </button>
       </div>
 
+      {/* ── KataGo / Go Chinese playlist tabs ── */}
+      <div className="flex gap-1 mb-6 border-b">
+        {(['en', 'zh'] as GamesLang[]).map(lang => {
+          const pl    = PLAYLIST_LABELS[lang]
+          const count = videos.filter(v => (v.lang ?? 'en') === lang).length
+          return (
+            <button
+              key={lang}
+              onClick={() => setActiveLang(lang)}
+              className={`px-5 py-2 text-sm font-medium border-b-2 transition-colors -mb-px ${
+                activeLang === lang
+                  ? 'border-foreground text-foreground'
+                  : 'border-transparent text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {pl.label}
+              {!loading && count > 0 && (
+                <span className="ml-1.5 text-xs text-muted-foreground">({count})</span>
+              )}
+            </button>
+          )
+        })}
+        <a
+          href={`https://www.youtube.com/playlist?list=${PLAYLIST_LABELS[activeLang].playlist}`}
+          target="_blank" rel="noopener noreferrer"
+          className="ml-auto self-center text-xs text-muted-foreground hover:text-foreground transition-colors pb-2"
+        >
+          ↗ playlist
+        </a>
+      </div>
+
       {/* ── loading ── */}
       {loading && (
         <div className="flex items-center justify-center py-16 text-muted-foreground">Loading…</div>
@@ -384,7 +429,7 @@ export default function GamesPage() {
 
       {!loading && (
         <>
-          {/* ── channel stat cards ── */}
+          {/* ── stat cards (per active playlist) ── */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
             <StatCard
               label="Subscribers"
@@ -395,11 +440,12 @@ export default function GamesPage() {
                     ? fmt(channel.subscriber_count)
                     : '—'
               }
+              sub="channel total"
             />
             <StatCard
               label="Videos"
-              value={fmt(videos.length)}
-              sub={`${fmt(channel?.video_count)} on channel`}
+              value={fmt(filteredVideos.length)}
+              sub={`${PLAYLIST_LABELS[activeLang].label} playlist`}
             />
             <StatCard
               label="Total views"
@@ -409,7 +455,7 @@ export default function GamesPage() {
               label="Avg retention"
               value={avgRetention != null ? `${avgRetention.toFixed(1)}%` : '—'}
               sub={videosWithRetention.length > 0
-                ? `${videosWithRetention.length} of ${videos.length} videos`
+                ? `${videosWithRetention.length} of ${filteredVideos.length} videos`
                 : 'Enable Analytics API'}
             />
           </div>
@@ -446,18 +492,22 @@ export default function GamesPage() {
             </div>
           </div>
 
-          {/* ── video cards ── */}
-          {videos.length === 0 ? (
+          {/* ── video cards (filtered by active playlist tab) ── */}
+          {filteredVideos.length === 0 ? (
             <div className="rounded-xl border border-dashed p-10 text-center text-muted-foreground">
               <p className="text-4xl mb-3">🎬</p>
-              <p className="font-medium">No video data yet</p>
-              <p className="text-sm mt-1">
-                Click <strong>↻ Refresh</strong> to fetch from YouTube.
+              <p className="font-medium">
+                {videos.length === 0 ? 'No video data yet' : `No ${PLAYLIST_LABELS[activeLang].label} videos yet`}
               </p>
+              {videos.length === 0 && (
+                <p className="text-sm mt-1">
+                  Click <strong>↻ Refresh</strong> to fetch from YouTube.
+                </p>
+              )}
             </div>
           ) : (
             <div className="flex flex-col gap-3">
-              {videos.map(v => (
+              {filteredVideos.map(v => (
                 <VideoCard key={v.video_id} video={v} />
               ))}
             </div>

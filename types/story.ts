@@ -161,6 +161,7 @@ export interface GamesVideoRow {
   comment_count:     number | null
   avg_view_duration: number | null   // seconds
   avg_view_pct:      number | null   // %
+  lang:              string | null   // 'en' = KataGo playlist, 'zh' = Go Chinese playlist
   fetched_at:        string | null
   comments:          GamesComment[]
 }
