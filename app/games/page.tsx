@@ -1,8 +1,8 @@
 'use client'
 
 import { useEffect, useState, useMemo } from 'react'
-import { fetchGamesChannelStats, fetchGamesVideos, fetchGamesAudienceCountries, fetchGamesSubtitleLangs } from '@/lib/api/stories'
-import type { GamesChannelStats, GamesVideoRow, GamesComment, GamesCountryRow, GamesSubtitleRow } from '@/types/story'
+import { fetchGamesChannelStats, fetchGamesVideos, fetchGamesAudienceCountries, fetchGamesSubtitleLangs, fetchGamesStrategyChanges } from '@/lib/api/stories'
+import type { GamesChannelStats, GamesVideoRow, GamesComment, GamesCountryRow, GamesSubtitleRow, StrategyChange } from '@/types/story'
 
 type GamesTab = 'en' | 'zh' | 'famous-en' | 'famous-zh'
 
@@ -356,6 +356,169 @@ function FamousSideBySide({
   )
 }
 
+// ── strategy-period weekly grouping ──────────────────────────────────────────
+
+/** ISO week key "YYYY-Www" (Monday-anchored, ISO 8601) */
+function isoWeek(iso: string): string {
+  const d = new Date(iso)
+  const day = d.getUTCDay() || 7
+  d.setUTCDate(d.getUTCDate() + 4 - day)
+  const year = d.getUTCFullYear()
+  const startOfYear = new Date(Date.UTC(year, 0, 1))
+  const week = Math.ceil(((d.getTime() - startOfYear.getTime()) / 86400000 + 1) / 7)
+  return `${year}-W${String(week).padStart(2, '0')}`
+}
+
+function weekDateRange(weekKey: string): string {
+  const [year, wStr] = weekKey.split('-W')
+  const week = parseInt(wStr, 10)
+  const jan4 = new Date(Date.UTC(parseInt(year), 0, 4))
+  const jan4Day = jan4.getUTCDay() || 7
+  const monday = new Date(jan4.getTime() + (1 - jan4Day + (week - 1) * 7) * 86400000)
+  const sunday = new Date(monday.getTime() + 6 * 86400000)
+  const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', timeZone: 'UTC' }
+  return `${monday.toLocaleDateString(undefined, opts)} – ${sunday.toLocaleDateString(undefined, opts)}`
+}
+
+function strategyForDate(dateStr: string, strategies: StrategyChange[]): StrategyChange | null {
+  if (!strategies.length) return null
+  const date = dateStr.slice(0, 10)
+  for (const s of strategies) {
+    if (s.date <= date) return s
+  }
+  return strategies[strategies.length - 1]
+}
+
+function retentionColor(pct: number | null | undefined): string {
+  if (pct == null) return 'text-muted-foreground'
+  if (pct >= 30)   return 'text-green-600 dark:text-green-400'
+  if (pct >= 15)   return 'text-foreground'
+  return 'text-orange-500'
+}
+
+function DeltaBadge({ current, previous }: { current: number | null; previous: number | null }) {
+  if (current == null || previous == null) return null
+  const delta = current - previous
+  if (Math.abs(delta) < 0.5) return <span className="text-xs text-muted-foreground ml-1">→</span>
+  const up = delta > 0
+  return (
+    <span className={`text-xs font-medium ml-1 ${up ? 'text-green-600 dark:text-green-400' : 'text-orange-500'}`}>
+      {up ? '▲' : '▼'}{Math.abs(delta).toFixed(1)}%
+    </span>
+  )
+}
+
+interface GamesWeekGroup {
+  weekKey:      string
+  dateRange:    string
+  strategy:     StrategyChange | null
+  videos:       GamesVideoRow[]
+  overallRet:   number | null
+  totalViews:   number
+  pendingCount: number
+}
+
+function buildGamesWeekGroups(videos: GamesVideoRow[], strategies: StrategyChange[]): GamesWeekGroup[] {
+  const map = new Map<string, GamesVideoRow[]>()
+  for (const v of videos) {
+    if (!v.published_at) continue
+    const key = isoWeek(v.published_at)
+    if (!map.has(key)) map.set(key, [])
+    map.get(key)!.push(v)
+  }
+
+  const groups: GamesWeekGroup[] = Array.from(map.entries()).map(([weekKey, wVideos]) => {
+    wVideos.sort((a: GamesVideoRow, b: GamesVideoRow) =>
+      (b.published_at ?? '').localeCompare(a.published_at ?? ''))
+    const retVids    = wVideos.filter((v: GamesVideoRow) => v.avg_view_pct != null)
+    const overallRet = retVids.length > 0
+      ? retVids.reduce((s: number, v: GamesVideoRow) => s + (v.avg_view_pct ?? 0), 0) / retVids.length
+      : null
+    const firstDate  = wVideos[0]?.published_at ?? ''
+    return {
+      weekKey,
+      dateRange:    weekDateRange(weekKey),
+      strategy:     strategyForDate(firstDate, strategies),
+      videos:       wVideos,
+      overallRet,
+      totalViews:   wVideos.reduce((s: number, v: GamesVideoRow) => s + (v.views ?? 0), 0),
+      pendingCount: wVideos.filter((v: GamesVideoRow) => v.fetched_at === null && v.avg_view_pct === null).length,
+    }
+  })
+  groups.sort((a, b) => b.weekKey.localeCompare(a.weekKey))
+  return groups
+}
+
+function GamesWeekBlock({
+  group,
+  previousGroup,
+}: {
+  group:         GamesWeekGroup
+  previousGroup: GamesWeekGroup | undefined
+}) {
+  const [expanded, setExpanded] = useState(false)
+  const allPending = group.pendingCount === group.videos.length
+  const prevRet    = previousGroup?.overallRet ?? null
+
+  return (
+    <div className="rounded-xl border overflow-hidden">
+      {/* header */}
+      <div className="px-4 py-3 bg-muted/30 border-b flex items-start justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-semibold text-sm">{group.weekKey}</span>
+            <span className="text-xs text-muted-foreground">{group.dateRange}</span>
+            {group.strategy && (
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-950/40 dark:text-blue-300">
+                {group.strategy.label}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-4 mt-1.5 text-sm flex-wrap">
+            <span className="text-muted-foreground">
+              {group.videos.length} videos
+              {group.pendingCount > 0 && (
+                <span className="ml-1 text-muted-foreground/60">· {group.pendingCount} pending</span>
+              )}
+            </span>
+            {!allPending && (
+              <>
+                <span>👁 <span className="font-medium">{fmt(group.totalViews)}</span></span>
+                <span>
+                  📊{' '}
+                  {group.overallRet != null ? (
+                    <>
+                      <span className={`font-bold ${retentionColor(group.overallRet)}`}>
+                        {group.overallRet.toFixed(1)}%
+                      </span>
+                      <DeltaBadge current={group.overallRet} previous={prevRet} />
+                    </>
+                  ) : '—'}
+                  {' '}<span className="text-xs text-muted-foreground">avg retention</span>
+                </span>
+              </>
+            )}
+            {allPending && (
+              <span className="text-xs text-muted-foreground/60">⏳ analytics not ready (72h wait)</span>
+            )}
+          </div>
+        </div>
+        <button
+          onClick={() => setExpanded(e => !e)}
+          className="flex-shrink-0 text-xs text-muted-foreground hover:text-foreground px-2 py-1 rounded transition-colors"
+        >
+          {expanded ? '▲' : '▼'}
+        </button>
+      </div>
+      {expanded && (
+        <div className="px-4 py-3 flex flex-col gap-2">
+          {group.videos.map(v => <VideoCard key={v.video_id} video={v} />)}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── page ──────────────────────────────────────────────────────────────────────
 
 export default function GamesPage() {
@@ -367,8 +530,10 @@ export default function GamesPage() {
   const [error, setError]           = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [activeTab, setActiveTab]   = useState<GamesTab>('en')
+  const [strategies, setStrategies] = useState<StrategyChange[]>([])
 
   function load() {
+    fetchGamesStrategyChanges().then(setStrategies).catch(() => {})
     return Promise.all([
       fetchGamesChannelStats(),
       fetchGamesVideos(),
@@ -423,6 +588,11 @@ export default function GamesPage() {
     : null
 
   const isFamousTab = activeTab === 'famous-en' || activeTab === 'famous-zh'
+
+  const weekGroups = useMemo(
+    () => isFamousTab ? [] : buildGamesWeekGroups(filteredVideos, strategies),
+    [filteredVideos, strategies, isFamousTab],
+  )
 
   return (
     <div className="container max-w-3xl mx-auto px-4 py-8">
@@ -622,11 +792,31 @@ export default function GamesPage() {
               )}
             </div>
           ) : (
-            <div className="flex flex-col gap-3">
-              {filteredVideos.map(v => (
-                <VideoCard key={v.video_id} video={v} />
-              ))}
-            </div>
+            <>
+              {/* ── weekly breakdown by strategy period ── */}
+              <div className="flex flex-col gap-4 mb-8">
+                {weekGroups.map((group, idx) => (
+                  <GamesWeekBlock
+                    key={group.weekKey}
+                    group={group}
+                    previousGroup={weekGroups[idx + 1]}
+                  />
+                ))}
+              </div>
+
+              {/* ── flat video list ── */}
+              <div className="flex items-center gap-3 mb-4">
+                <h2 className="text-base font-semibold">📋 All Videos</h2>
+                <span className="text-xs text-muted-foreground">
+                  {filteredVideos.length} videos · newest first
+                </span>
+              </div>
+              <div className="flex flex-col gap-3">
+                {filteredVideos.map(v => (
+                  <VideoCard key={v.video_id} video={v} />
+                ))}
+              </div>
+            </>
           )}
 
           {/* ── token info ── */}

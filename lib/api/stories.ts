@@ -121,6 +121,14 @@ export async function fetchGamesSubtitleLangs(): Promise<GamesSubtitleRow[]> {
 }
 
 /**
+ * Fetch KataGo title/upload strategy change dates and labels, newest-first.
+ * Used to annotate the games page weekly summary with strategy periods.
+ */
+export async function fetchGamesStrategyChanges(): Promise<StrategyChange[]> {
+  return storyFetch<StrategyChange[]>('/games/strategy-changes')
+}
+
+/**
  * Fetch all published deep-story videos for the EN or ZH channel,
  * newest first, with analytics data and story title.
  */
