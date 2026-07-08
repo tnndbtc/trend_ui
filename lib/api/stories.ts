@@ -5,7 +5,7 @@
  * Next.js rewrites proxy /api/stories/* to the story_engine backend.
  */
 
-import type { Story, StoriesListResponse, StorySetSummary, StoryLang, FormatType, YoutubeAnalyticRow, YoutubeSubscriber, StoryWithComments, GamesChannelStats, GamesVideoRow, GamesCountryRow, GamesSubtitleRow, ChannelVideoRow, StrategyChange } from '@/types/story'
+import type { Story, StoriesListResponse, StorySetSummary, StoryLang, FormatType, YoutubeAnalyticRow, YoutubeSubscriber, StoryWithComments, GamesChannelStats, GamesVideoRow, GamesCountryRow, GamesSubtitleRow, ChannelVideoRow, StrategyChange, VideoWithCommentQuestions } from '@/types/story'
 
 const STORY_API_BASE = process.env.NEXT_PUBLIC_STORY_API_BASE_URL || '/api'
 
@@ -163,4 +163,40 @@ export async function fetchStories(opts?: {
     lang: opts?.lang,
     limit: opts?.limit?.toString(),
   })
+}
+
+// ---------------------------------------------------------------------------
+// Comment-questions review
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetch all KataGo videos that have analyzed/approved comment_questions.
+ * Each video embeds its questions with winrate results.
+ */
+export async function fetchCommentQuestions(): Promise<VideoWithCommentQuestions[]> {
+  return storyFetch<VideoWithCommentQuestions[]>('/games/comment-questions')
+}
+
+/**
+ * Approve a comment question and immediately post the KataGo reply to YouTube.
+ * Returns { status: 'posted', id, reply_id } on success.
+ * Throws with the server's error detail on failure.
+ */
+export async function approveCommentQuestion(id: number): Promise<{ status: string; id: number; reply_id?: string }> {
+  const response = await fetch(`${STORY_API_BASE}/games/comment-questions/${id}/approve`, { method: 'POST' })
+  if (!response.ok) {
+    let detail = `HTTP ${response.status}`
+    try { detail = (await response.json()).detail ?? detail } catch { /* ignore */ }
+    throw new Error(detail)
+  }
+  return response.json()
+}
+
+/**
+ * Skip (reject) a comment question — will not be posted to YouTube.
+ */
+export async function skipCommentQuestion(id: number): Promise<{ status: string; id: number }> {
+  const response = await fetch(`${STORY_API_BASE}/games/comment-questions/${id}/skip`, { method: 'POST' })
+  if (!response.ok) throw new Error(`Skip failed: ${response.status}`)
+  return response.json()
 }

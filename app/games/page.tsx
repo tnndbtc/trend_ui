@@ -1,16 +1,18 @@
 'use client'
 
 import { useEffect, useState, useMemo } from 'react'
-import { fetchGamesChannelStats, fetchGamesVideos, fetchGamesAudienceCountries, fetchGamesSubtitleLangs, fetchGamesStrategyChanges } from '@/lib/api/stories'
-import type { GamesChannelStats, GamesVideoRow, GamesComment, GamesCountryRow, GamesSubtitleRow, StrategyChange } from '@/types/story'
+import { fetchGamesChannelStats, fetchGamesVideos, fetchGamesAudienceCountries, fetchGamesSubtitleLangs, fetchGamesStrategyChanges, fetchCommentQuestions, approveCommentQuestion, skipCommentQuestion } from '@/lib/api/stories'
+import type { GamesChannelStats, GamesVideoRow, GamesComment, GamesCountryRow, GamesSubtitleRow, StrategyChange, VideoWithCommentQuestions, CommentQuestion } from '@/types/story'
 
-type GamesTab = 'en' | 'zh' | 'famous-en' | 'famous-zh'
+type GamesTab = 'en' | 'zh' | 'ja' | 'famous-en' | 'famous-zh' | 'comments'
 
 const TAB_META: Record<GamesTab, { label: string; playlist?: string; emoji: string }> = {
-  'en':        { label: 'KataGo',        emoji: '♟',  playlist: 'PL5Xv3qmUSUqUrG-NTMe2IjNP_aHcI2m-w' },
-  'zh':        { label: 'Go Chinese',    emoji: '围棋', playlist: 'PL5Xv3qmUSUqWDllUJi9BEP_3basoWCHv0' },
-  'famous-en': { label: 'Famous EN',     emoji: '🏆' },
-  'famous-zh': { label: 'Famous ZH',     emoji: '🏆' },
+  'en':        { label: 'KataGo',          emoji: '♟',   playlist: 'PL5Xv3qmUSUqUrG-NTMe2IjNP_aHcI2m-w' },
+  'zh':        { label: 'KataGo Chinese',  emoji: '围棋', playlist: 'PL5Xv3qmUSUqWDllUJi9BEP_3basoWCHv0' },
+  'ja':        { label: 'KataGo Japanese', emoji: '囲碁', playlist: 'PL5Xv3qmUSUqVTvMeP1c63Xv6LrC8CCi-7' },
+  'famous-en': { label: 'Famous EN',       emoji: '🏆' },
+  'famous-zh': { label: 'Famous ZH',       emoji: '🏆' },
+  'comments':  { label: 'Comments',        emoji: '💬' },
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -519,6 +521,397 @@ function GamesWeekBlock({
   )
 }
 
+// ── Comments review ───────────────────────────────────────────────────────────
+
+function WinrateTable({ result, whatifMoves }: { result: VideoWithCommentQuestions['questions'][0]['result']; whatifMoves: string }) {
+  const forkDelta = result.steps.length > 0
+    ? result.steps[0].winrate - result.fork_winrate
+    : null
+
+  function deltaLabel(delta: number): string {
+    const sign = delta >= 0 ? '+' : ''
+    return `${sign}${delta.toFixed(1)}%`
+  }
+
+  function deltaColor(delta: number): string {
+    // Positive delta = Black gains → green; negative = Black loses → orange
+    if (Math.abs(delta) < 0.3) return 'text-muted-foreground'
+    return delta > 0 ? 'text-green-600 dark:text-green-400' : 'text-orange-500'
+  }
+
+  return (
+    <div className="mt-2 rounded-lg border bg-muted/20 text-xs overflow-hidden">
+      <table className="w-full">
+        <thead>
+          <tr className="border-b bg-muted/40">
+            <th className="text-left px-3 py-1.5 font-medium text-muted-foreground">Position</th>
+            <th className="text-right px-3 py-1.5 font-medium text-muted-foreground">Black Win%</th>
+            <th className="text-right px-3 py-1.5 font-medium text-muted-foreground">Score</th>
+            <th className="text-right px-3 py-1.5 font-medium text-muted-foreground">Δ Win%</th>
+          </tr>
+        </thead>
+        <tbody>
+          {/* Fork row */}
+          <tr className="border-b">
+            <td className="px-3 py-1.5 font-medium">Before fork (at move {result.fork_winrate != null ? '' : '…'})</td>
+            <td className="px-3 py-1.5 text-right tabular-nums font-semibold">{result.fork_winrate.toFixed(1)}%</td>
+            <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">
+              {result.fork_score >= 0 ? '+' : ''}{result.fork_score.toFixed(1)}
+            </td>
+            <td className="px-3 py-1.5 text-right">—</td>
+          </tr>
+          {/* Step rows */}
+          {result.steps.map((step, i) => {
+            const prevWinrate = i === 0 ? result.fork_winrate : result.steps[i - 1].winrate
+            const delta = step.winrate - prevWinrate
+            return (
+              <tr key={i} className={i < result.steps.length - 1 ? 'border-b' : ''}>
+                <td className="px-3 py-1.5">
+                  <span className={`inline-flex items-center gap-1 font-medium ${step.color === 'Black' ? 'text-foreground' : 'text-muted-foreground'}`}>
+                    <span className={`w-2 h-2 rounded-full inline-block ${step.color === 'Black' ? 'bg-foreground' : 'bg-muted-foreground border border-foreground'}`} />
+                    {step.color} {step.move}
+                  </span>
+                </td>
+                <td className="px-3 py-1.5 text-right tabular-nums font-semibold">{step.winrate.toFixed(1)}%</td>
+                <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">
+                  {step.score >= 0 ? '+' : ''}{step.score.toFixed(1)}
+                </td>
+                <td className={`px-3 py-1.5 text-right tabular-nums font-medium ${deltaColor(delta)}`}>
+                  {deltaLabel(delta)}
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function QuestionCard({
+  question,
+  videoId,
+  onApprove,
+  onSkip,
+}: {
+  question: CommentQuestion
+  videoId: string
+  onApprove: (id: number) => Promise<{ reply_id?: string; error?: string }>
+  onSkip: (id: number) => void
+}) {
+  const [acting, setActing]   = useState<'approve' | 'skip' | null>(null)
+  const [postResult, setPostResult] = useState<{ ok: boolean; msg: string } | null>(null)
+
+  async function handleApprove() {
+    setActing('approve')
+    setPostResult(null)
+    try {
+      const res = await onApprove(question.id)
+      if (res.reply_id) {
+        setPostResult({ ok: true, msg: '✅ Reply posted to video successfully.' })
+      } else {
+        setPostResult({ ok: false, msg: `❌ ${res.error ?? 'Unknown error'}` })
+      }
+    } catch (e: unknown) {
+      setPostResult({ ok: false, msg: `❌ ${e instanceof Error ? e.message : String(e)}` })
+    } finally {
+      setActing(null)
+    }
+  }
+  async function handleSkip() {
+    setActing('skip')
+    try { await onSkip(question.id) } finally { setActing(null) }
+  }
+
+  const isPosted  = postResult?.ok === true || question.status === 'replied'
+  const isSkipped = question.status === 'skipped'
+  const isDone    = isPosted || isSkipped
+  const ytCommentUrl = `https://www.youtube.com/watch?v=${videoId}&lc=${question.comment_id}`
+
+  return (
+    <div className={`rounded-lg border p-3 transition-colors ${
+      isPosted   ? 'border-green-300 bg-green-50 dark:border-green-800 dark:bg-green-950/20' :
+      isSkipped  ? 'border-muted bg-muted/20 opacity-60' :
+                   'bg-card'
+    }`}>
+      {/* Comment text — links directly to the YouTube comment */}
+      <div className="flex gap-2 items-start mb-2">
+        <a
+          href={ytCommentUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-base leading-none mt-0.5 flex-shrink-0 hover:opacity-70 transition-opacity"
+          title="View comment on YouTube"
+        >💬</a>
+        <a
+          href={ytCommentUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-sm leading-relaxed flex-1 hover:underline"
+          title="View comment on YouTube"
+        >{question.comment_text}</a>
+      </div>
+
+      {/* Meta: author, likes, move */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground mb-2">
+        {question.author && <span>{question.author}</span>}
+        {question.like_count > 0 && <span>👍 {question.like_count}</span>}
+        <span className="font-mono bg-muted px-1.5 py-0.5 rounded text-foreground">
+          Move {question.at_move}
+        </span>
+        {question.whatif_moves.split(' ').map((mv, i) => (
+          <span key={i} className="font-mono bg-blue-100 dark:bg-blue-950/40 text-blue-800 dark:text-blue-300 px-1.5 py-0.5 rounded">
+            {mv}
+          </span>
+        ))}
+        <span className="text-muted-foreground/60">{question.visits} visits</span>
+      </div>
+
+      {/* Winrate table */}
+      <WinrateTable result={question.result} whatifMoves={question.whatif_moves} />
+
+      {/* Action buttons — hidden once posted or skipped */}
+      {!isDone && (
+        <div className="flex gap-2 mt-3">
+          <button
+            onClick={handleApprove}
+            disabled={acting !== null}
+            className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg border border-green-300 bg-green-50 text-green-800 dark:border-green-700 dark:bg-green-950/30 dark:text-green-300 text-sm font-medium hover:bg-green-100 dark:hover:bg-green-950/50 transition-colors disabled:opacity-50"
+          >
+            {acting === 'approve' ? (
+              <span className="inline-block w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+            ) : '✓'} Approve &amp; Post
+          </button>
+          <button
+            onClick={handleSkip}
+            disabled={acting !== null}
+            className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-medium hover:bg-muted transition-colors disabled:opacity-50 text-muted-foreground"
+          >
+            {acting === 'skip' ? (
+              <span className="inline-block w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+            ) : '✗'} Skip
+          </button>
+        </div>
+      )}
+
+      {/* Post result feedback */}
+      {postResult && (
+        <p className={`mt-2 text-xs font-medium ${postResult.ok ? 'text-green-700 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+          {postResult.msg}
+        </p>
+      )}
+      {!postResult && question.status === 'replied' && (
+        <p className="mt-2 text-xs text-green-700 dark:text-green-400 font-medium">✅ Reply posted to video successfully.</p>
+      )}
+      {isSkipped && (
+        <p className="mt-2 text-xs text-muted-foreground">✗ Skipped</p>
+      )}
+    </div>
+  )
+}
+
+function CommentsReview() {
+  const [videos, setVideos]               = useState<VideoWithCommentQuestions[]>([])
+  const [loading, setLoading]             = useState(true)
+  const [error, setError]                 = useState<string | null>(null)
+  const [selectedVideoDbId, setSelected]  = useState<number | null>(null)
+
+  // local status overrides: question id → 'approved' | 'skipped'
+  const [overrides, setOverrides] = useState<Record<number, string>>({})
+
+  useEffect(() => {
+    fetchCommentQuestions()
+      .then(data => {
+        setVideos(data)
+        if (data.length > 0) setSelected(data[0].video_db_id)
+      })
+      .catch(e => setError(e.message))
+      .finally(() => setLoading(false))
+  }, [])
+
+  const selectedVideo = videos.find(v => v.video_db_id === selectedVideoDbId) ?? null
+
+  async function handleApprove(id: number): Promise<{ reply_id?: string; error?: string }> {
+    try {
+      const res = await approveCommentQuestion(id)
+      if (res.status === 'posted') {
+        setOverrides(prev => ({ ...prev, [id]: 'replied' }))
+        return { reply_id: res.reply_id }
+      }
+      return { error: res.status }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      return { error: msg }
+    }
+  }
+  async function handleSkip(id: number) {
+    await skipCommentQuestion(id)
+    setOverrides(prev => ({ ...prev, [id]: 'skipped' }))
+  }
+
+  function effectiveStatus(q: CommentQuestion): string {
+    return overrides[q.id] ?? q.status
+  }
+
+  function pendingCount(v: VideoWithCommentQuestions): number {
+    return v.questions.filter(q => effectiveStatus(q) === 'analyzed').length
+  }
+
+  if (loading) {
+    return <div className="flex items-center justify-center py-16 text-muted-foreground">Loading…</div>
+  }
+  if (error) {
+    return (
+      <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+        {error}
+      </div>
+    )
+  }
+  if (videos.length === 0) {
+    return (
+      <div className="rounded-xl border border-dashed p-10 text-center text-muted-foreground">
+        <p className="text-4xl mb-3">💬</p>
+        <p className="font-medium">No analyzed comment questions yet</p>
+        <p className="text-sm mt-1">Run <code className="font-mono bg-muted px-1 py-0.5 rounded">fetch_and_parse_comments.py</code> then <code className="font-mono bg-muted px-1 py-0.5 rounded">run_whatif_worker.py</code> to populate.</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* ── Video picker ── */}
+      <div className="rounded-xl border overflow-hidden">
+        <div className="px-4 py-2.5 bg-muted/30 border-b">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+            Videos with comment questions
+          </p>
+        </div>
+        <div className="divide-y">
+          {videos.map(v => {
+            const isSelected = v.video_db_id === selectedVideoDbId
+            const pending    = pendingCount(v)
+            const total      = v.questions.length
+            const ytUrl      = `https://www.youtube.com/watch?v=${v.video_id}`
+            return (
+              <button
+                key={v.video_db_id}
+                onClick={() => setSelected(v.video_db_id)}
+                className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/30 ${
+                  isSelected ? 'bg-muted/50' : ''
+                }`}
+              >
+                {/* Thumbnail */}
+                <div className="flex-shrink-0 w-20 h-[45px] rounded overflow-hidden bg-muted">
+                  <img
+                    src={`https://i.ytimg.com/vi/${v.video_id}/mqdefault.jpg`}
+                    alt={v.title ?? v.video_id}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+                {/* Title + counts */}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium leading-snug line-clamp-2">
+                    {v.title ?? v.video_id}
+                  </p>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    {pending > 0 && (
+                      <span className="text-xs font-semibold text-orange-600 dark:text-orange-400">
+                        {pending} pending
+                      </span>
+                    )}
+                    {pending < total && (
+                      <span className="text-xs text-muted-foreground">
+                        {total - pending} done
+                      </span>
+                    )}
+                  </div>
+                </div>
+                {/* Arrow */}
+                <span className="flex-shrink-0 text-muted-foreground text-xs">{isSelected ? '▼' : '▶'}</span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* ── Selected video detail ── */}
+      {selectedVideo && (() => {
+        const ytUrl = `https://www.youtube.com/watch?v=${selectedVideo.video_id}`
+        const questions = selectedVideo.questions.map(q => ({
+          ...q,
+          status: effectiveStatus(q),
+        }))
+        const pending  = questions.filter(q => q.status === 'analyzed').length
+        const approved = questions.filter(q => q.status === 'approved').length
+        const skipped  = questions.filter(q => q.status === 'skipped').length
+
+        return (
+          <div className="rounded-xl border overflow-hidden">
+            {/* Video header */}
+            <div className="px-4 py-3 flex gap-4 items-start border-b bg-muted/10">
+              <a
+                href={ytUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-shrink-0 w-32 h-[72px] rounded-lg overflow-hidden bg-muted hover:opacity-80 transition-opacity"
+                title="Open video on YouTube"
+              >
+                <img
+                  src={`https://i.ytimg.com/vi/${selectedVideo.video_id}/mqdefault.jpg`}
+                  alt={selectedVideo.title ?? selectedVideo.video_id}
+                  className="w-full h-full object-cover"
+                />
+              </a>
+              <div className="flex-1 min-w-0">
+                <a
+                  href={ytUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm font-semibold hover:underline leading-snug line-clamp-2 block"
+                >
+                  {selectedVideo.title ?? selectedVideo.video_id}
+                </a>
+                <div className="flex gap-3 mt-1.5 text-xs text-muted-foreground flex-wrap">
+                  <span>{questions.length} question{questions.length !== 1 ? 's' : ''}</span>
+                  {pending  > 0 && <span className="text-orange-600 dark:text-orange-400 font-medium">⏳ {pending} pending</span>}
+                  {approved > 0 && <span className="text-green-600 dark:text-green-400 font-medium">✓ {approved} approved</span>}
+                  {skipped  > 0 && <span className="text-muted-foreground">✗ {skipped} skipped</span>}
+                </div>
+                <a
+                  href={ytUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-1.5 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  ↗ Open on YouTube
+                </a>
+              </div>
+            </div>
+
+            {/* Question cards */}
+            <div className="px-4 py-3 flex flex-col gap-3">
+              {questions.map((q, i) => (
+                <div key={q.id}>
+                  {i > 0 && <div className="border-t -mx-4 mb-3" />}
+                  <p className="text-xs text-muted-foreground mb-2 font-medium uppercase tracking-wide">
+                    Question {i + 1} / {questions.length}
+                  </p>
+                  <QuestionCard
+                    question={q}
+                    videoId={selectedVideo.video_id}
+                    onApprove={handleApprove}
+                    onSkip={handleSkip}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        )
+      })()}
+    </div>
+  )
+}
+
 // ── page ──────────────────────────────────────────────────────────────────────
 
 export default function GamesPage() {
@@ -566,14 +959,17 @@ export default function GamesPage() {
 
   const selfplayEn  = useMemo(() => videos.filter(v => (v.lang ?? 'en') === 'en' && !v.is_famous), [videos])
   const selfplayZh  = useMemo(() => videos.filter(v => v.lang === 'zh' && !v.is_famous), [videos])
+  const selfplayJa  = useMemo(() => videos.filter(v => v.lang === 'ja' && !v.is_famous), [videos])
   const famousEn    = useMemo(() => videos.filter(v => v.is_famous && (v.lang ?? 'en') === 'en'), [videos])
   const famousZh    = useMemo(() => videos.filter(v => v.is_famous && v.lang === 'zh'), [videos])
 
   const tabVideos: Record<GamesTab, GamesVideoRow[]> = {
     'en':        selfplayEn,
     'zh':        selfplayZh,
+    'ja':        selfplayJa,
     'famous-en': famousEn,
     'famous-zh': famousZh,
+    'comments':  [],   // not used; CommentsReview fetches its own data
   }
 
   const filteredVideos = tabVideos[activeTab]
@@ -587,11 +983,12 @@ export default function GamesPage() {
     ? videosWithRetention.reduce((s, v) => s + (v.avg_view_pct ?? 0), 0) / videosWithRetention.length
     : null
 
-  const isFamousTab = activeTab === 'famous-en' || activeTab === 'famous-zh'
+  const isFamousTab   = activeTab === 'famous-en' || activeTab === 'famous-zh'
+  const isCommentsTab = activeTab === 'comments'
 
   const weekGroups = useMemo(
-    () => isFamousTab ? [] : buildGamesWeekGroups(filteredVideos, strategies),
-    [filteredVideos, strategies, isFamousTab],
+    () => (isFamousTab || isCommentsTab) ? [] : buildGamesWeekGroups(filteredVideos, strategies),
+    [filteredVideos, strategies, isFamousTab, isCommentsTab],
   )
 
   return (
@@ -636,7 +1033,7 @@ export default function GamesPage() {
       {/* ── tabs ── */}
       <div className="flex gap-1 mb-6 border-b">
         {/* Self-play tabs */}
-        {(['en', 'zh'] as GamesTab[]).map(tab => {
+        {(['en', 'zh', 'ja'] as GamesTab[]).map(tab => {
           const meta  = TAB_META[tab]
           const count = tabVideos[tab].length
           return (
@@ -682,8 +1079,23 @@ export default function GamesPage() {
           )
         })}
 
+        {/* Divider before Comments tab */}
+        <div className="w-px bg-border mx-1 self-stretch my-1" />
+
+        {/* Comments review tab */}
+        <button
+          onClick={() => setActiveTab('comments')}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors -mb-px ${
+            activeTab === 'comments'
+              ? 'border-foreground text-foreground'
+              : 'border-transparent text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          💬 Comments
+        </button>
+
         {/* Playlist link (only for selfplay tabs) */}
-        {!isFamousTab && TAB_META[activeTab].playlist && (
+        {!isFamousTab && activeTab !== 'comments' && TAB_META[activeTab].playlist && (
           <a
             href={`https://www.youtube.com/playlist?list=${TAB_META[activeTab].playlist}`}
             target="_blank" rel="noopener noreferrer"
@@ -706,7 +1118,10 @@ export default function GamesPage() {
         </div>
       )}
 
-      {!loading && (
+      {/* ── Comments review tab (independent of loading state) ── */}
+      {activeTab === 'comments' && <CommentsReview />}
+
+      {!loading && activeTab !== 'comments' && (
         <>
           {/* ── stat cards ── */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">

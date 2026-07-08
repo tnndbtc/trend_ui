@@ -161,7 +161,7 @@ export interface GamesVideoRow {
   comment_count:     number | null
   avg_view_duration: number | null   // seconds
   avg_view_pct:      number | null   // %
-  lang:              string | null   // 'en' = KataGo playlist, 'zh' = Go Chinese playlist
+  lang:              string | null   // 'en' = KataGo, 'zh' = KataGo Chinese, 'ja' = KataGo Japanese playlist
   is_famous:         number | null   // 1 = famous game, 0 = ai_selfplay
   ab_variant:        string | null   // 'male-en' | 'female-en' | 'male-zh' | 'female-zh'
   fetched_at:        string | null
@@ -202,4 +202,42 @@ export interface ChannelVideoRow {
 export interface StrategyChange {
   date:  string   // "YYYY-MM-DD"
   label: string   // e.g. "策略B（新选题策略）"
+}
+
+// ---------------------------------------------------------------------------
+// Comment-questions review  (GET /api/games/comment-questions)
+// ---------------------------------------------------------------------------
+
+export interface WinrateStep {
+  color:   string   // "Black" | "White"
+  move:    string   // GTP coordinate, e.g. "Q8"
+  winrate: number   // Black win% after this move
+  score:   number   // score lead (positive = Black ahead)
+}
+
+export interface WinrateResult {
+  fork_winrate: number       // Black win% at the fork (before hypothetical)
+  fork_score:   number       // score lead at fork
+  steps:        WinrateStep[]
+}
+
+export interface CommentQuestion {
+  id:           number
+  comment_id:   string
+  comment_text: string
+  author:       string | null
+  like_count:   number
+  at_move:      number
+  whatif_moves: string       // e.g. "Q8 Q9"
+  visits:       number
+  result:       WinrateResult
+  status:       string       // 'analyzed' | 'approved' | 'skipped'
+}
+
+export interface VideoWithCommentQuestions {
+  video_db_id:  number
+  video_id:     string
+  title:        string | null
+  published_at: number | null   // UNIX timestamp
+  questions:    CommentQuestion[]
 }
