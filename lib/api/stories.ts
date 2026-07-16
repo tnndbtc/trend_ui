@@ -5,7 +5,7 @@
  * Next.js rewrites proxy /api/stories/* to the story_engine backend.
  */
 
-import type { Story, StoriesListResponse, StorySetSummary, StoryLang, FormatType, YoutubeAnalyticRow, YoutubeSubscriber, StoryWithComments, GamesChannelStats, GamesVideoRow, GamesCountryRow, GamesSubtitleRow, ChannelVideoRow, StrategyChange, VideoWithCommentQuestions } from '@/types/story'
+import type { Story, StoriesListResponse, StorySetSummary, StoryLang, FormatType, YoutubeAnalyticRow, YoutubeSubscriber, StoryWithComments, GamesChannelStats, GamesVideoRow, GamesCountryRow, GamesSubtitleRow, GamesSubscriberSplit, ChannelVideoRow, StrategyChange, VideoWithCommentQuestions } from '@/types/story'
 
 const STORY_API_BASE = process.env.NEXT_PUBLIC_STORY_API_BASE_URL || '/api'
 
@@ -118,6 +118,17 @@ export async function fetchGamesAudienceCountries(): Promise<GamesCountryRow[]> 
 
 export async function fetchGamesSubtitleLangs(): Promise<GamesSubtitleRow[]> {
   return storyFetch<GamesSubtitleRow[]>('/games/subtitle-langs')
+}
+
+/**
+ * Fetch the live subscriber vs non-subscriber view split for one KataGo
+ * language tab (en | zh | ja). Runs a YouTube Analytics query server-side on
+ * every call — no cached/refresh step — so it reflects the latest data
+ * (through ~72h ago). Returns available=false with a note when YouTube
+ * withholds the breakdown for a low-volume language.
+ */
+export async function fetchGamesSubscriberSplit(lang: 'en' | 'zh' | 'ja'): Promise<GamesSubscriberSplit> {
+  return storyFetch<GamesSubscriberSplit>('/games/subscriber-split', { lang })
 }
 
 /**

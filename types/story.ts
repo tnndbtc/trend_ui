@@ -180,6 +180,38 @@ export interface GamesSubtitleRow {
   fetched_at: string | null
 }
 
+// Live subscriber vs non-subscriber view split for one KataGo language tab
+// (GET /api/games/subscriber-split?lang=en|zh|ja). Fetched fresh per page load.
+export interface SubscriberSplitWindow {
+  key:            string   // '7d' | '28d' | '90d'
+  label:          string
+  subscribed:     number
+  non_subscribed: number
+  total:          number
+  pct:            number   // % of views from subscribers
+}
+
+export interface SubscriberSplitWeek {
+  week_start:     string   // ISO date (Monday)
+  label:          string
+  subscribed:     number
+  non_subscribed: number
+  total:          number
+  pct:            number
+  partial:        boolean  // week not yet complete → drawn hollow
+}
+
+export interface GamesSubscriberSplit {
+  lang:        string
+  channel_id:  string | null
+  through:     string | null   // last day included (72h latency)
+  available:   boolean         // false → show `note` instead of charts
+  note:        string | null
+  video_count: number
+  windows:     SubscriberSplitWindow[]
+  weeks:       SubscriberSplitWeek[]
+}
+
 // ---------------------------------------------------------------------------
 // Story-engine channel analytics  (GET /api/analytics/channel?lang=en|zh)
 // ---------------------------------------------------------------------------

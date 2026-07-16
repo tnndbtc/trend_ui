@@ -3,6 +3,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { fetchGamesChannelStats, fetchGamesVideos, fetchGamesAudienceCountries, fetchGamesSubtitleLangs, fetchGamesStrategyChanges, fetchCommentQuestions, approveCommentQuestion, skipCommentQuestion } from '@/lib/api/stories'
 import type { GamesChannelStats, GamesVideoRow, GamesComment, GamesCountryRow, GamesSubtitleRow, StrategyChange, VideoWithCommentQuestions, CommentQuestion, WinrateResult, LifeDeathResult } from '@/types/story'
+import SubscriberSplitCard from '@/components/SubscriberSplitCard'
 
 type GamesTab = 'en' | 'zh' | 'ja' | 'famous-en' | 'famous-zh' | 'comments'
 
@@ -1200,6 +1201,11 @@ export default function GamesPage() {
                 : 'Enable Analytics API'}
             />
           </div>
+
+          {/* ── live subscriber vs non-subscriber split (per language tab) ── */}
+          {(activeTab === 'en' || activeTab === 'zh' || activeTab === 'ja') && (
+            <SubscriberSplitCard lang={activeTab} />
+          )}
 
           {/* ── viewer country + subtitle (only on selfplay tabs to avoid clutter) ── */}
           {!isFamousTab && countries.length > 0 && <AudienceMap rows={countries} />}
