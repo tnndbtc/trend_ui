@@ -221,17 +221,32 @@ export interface WinrateResult {
   steps:        WinrateStep[]
 }
 
+export interface LifeDeathResult {
+  status:           string   // 'alive' | 'dead' | 'unsettled'
+  target_color:     string   // 'B' | 'W'
+  group_anchor_gtp: string   // representative point, e.g. "S2"
+  group_size:       number
+  ownership_avg:    number   // avg ownership, group's-color perspective [-1,1]
+  confidence:       number   // 0..1
+  at_move:          number | null
+  whatif_moves:     string | null
+  resolved_by:      string | null   // 'anchor' | 'nearest_move' | 'region'
+}
+
 export interface CommentQuestion {
   id:           number
   comment_id:   string
   comment_text: string
   author:       string | null
   like_count:   number
-  at_move:      number
+  at_move:      number | null
   whatif_moves: string       // e.g. "Q8 Q9"
   visits:       number
-  result:       WinrateResult
-  status:       string       // 'analyzed' | 'approved' | 'skipped'
+  kind:          string                  // 'whatif' | 'life_death'
+  result:        WinrateResult | null    // set when kind='whatif'
+  life_death:    LifeDeathResult | null  // set when kind='life_death'
+  reply_preview: string | null           // exact localized reply that will be posted
+  status:        string       // 'analyzed' | 'approved' | 'skipped'
 }
 
 export interface VideoWithCommentQuestions {

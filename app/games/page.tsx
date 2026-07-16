@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react'
 import { fetchGamesChannelStats, fetchGamesVideos, fetchGamesAudienceCountries, fetchGamesSubtitleLangs, fetchGamesStrategyChanges, fetchCommentQuestions, approveCommentQuestion, skipCommentQuestion } from '@/lib/api/stories'
-import type { GamesChannelStats, GamesVideoRow, GamesComment, GamesCountryRow, GamesSubtitleRow, StrategyChange, VideoWithCommentQuestions, CommentQuestion } from '@/types/story'
+import type { GamesChannelStats, GamesVideoRow, GamesComment, GamesCountryRow, GamesSubtitleRow, StrategyChange, VideoWithCommentQuestions, CommentQuestion, WinrateResult, LifeDeathResult } from '@/types/story'
 
 type GamesTab = 'en' | 'zh' | 'ja' | 'famous-en' | 'famous-zh' | 'comments'
 
@@ -523,7 +523,30 @@ function GamesWeekBlock({
 
 // ── Comments review ───────────────────────────────────────────────────────────
 
-function WinrateTable({ result, whatifMoves }: { result: VideoWithCommentQuestions['questions'][0]['result']; whatifMoves: string }) {
+function LifeDeathVerdict({ lifeDeath }: { lifeDeath: LifeDeathResult }) {
+  const color = lifeDeath.target_color === 'W' ? 'White' : 'Black'
+  const conf  = Math.round((lifeDeath.confidence ?? 0) * 100)
+  const label = ({ alive: 'ALIVE', dead: 'DEAD', unsettled: 'UNSETTLED' } as Record<string, string>)[lifeDeath.status] ?? lifeDeath.status.toUpperCase()
+  const color_cls =
+    lifeDeath.status === 'alive' ? 'text-green-600 dark:text-green-400' :
+    lifeDeath.status === 'dead'  ? 'text-red-600 dark:text-red-400' :
+                                   'text-amber-500 dark:text-amber-400'
+  const own = lifeDeath.ownership_avg
+  return (
+    <div className="mt-2 rounded-lg border bg-muted/20 text-sm p-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+      <span className={`font-bold text-base ${color_cls}`}>{label}</span>
+      <span className="text-muted-foreground">
+        {color} group at <span className="font-mono text-foreground">{lifeDeath.group_anchor_gtp}</span>
+        {lifeDeath.group_size > 0 && <span> ({lifeDeath.group_size} stones)</span>}
+      </span>
+      <span className="text-muted-foreground">· confidence <span className="tabular-nums text-foreground">{conf}%</span></span>
+      <span className="text-muted-foreground">· ownership <span className="tabular-nums text-foreground">{own >= 0 ? '+' : ''}{own.toFixed(2)}</span></span>
+      {lifeDeath.resolved_by && <span className="text-muted-foreground/60 text-xs">via {lifeDeath.resolved_by}</span>}
+    </div>
+  )
+}
+
+function WinrateTable({ result, whatifMoves }: { result: WinrateResult; whatifMoves: string }) {
   const forkDelta = result.steps.length > 0
     ? result.steps[0].winrate - result.fork_winrate
     : null
@@ -656,19 +679,41 @@ function QuestionCard({
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground mb-2">
         {question.author && <span>{question.author}</span>}
         {question.like_count > 0 && <span>👍 {question.like_count}</span>}
-        <span className="font-mono bg-muted px-1.5 py-0.5 rounded text-foreground">
-          Move {question.at_move}
-        </span>
-        {question.whatif_moves.split(' ').map((mv, i) => (
+        {question.at_move != null && (
+          <span className="font-mono bg-muted px-1.5 py-0.5 rounded text-foreground">
+            Move {question.at_move}
+          </span>
+        )}
+        {question.whatif_moves.split(' ').filter(Boolean).map((mv, i) => (
           <span key={i} className="font-mono bg-blue-100 dark:bg-blue-950/40 text-blue-800 dark:text-blue-300 px-1.5 py-0.5 rounded">
             {mv}
           </span>
         ))}
+        {question.kind === 'life_death' && (
+          <span className="font-mono bg-purple-100 dark:bg-purple-950/40 text-purple-800 dark:text-purple-300 px-1.5 py-0.5 rounded">
+            dead/live
+          </span>
+        )}
         <span className="text-muted-foreground/60">{question.visits} visits</span>
       </div>
 
-      {/* Winrate table */}
-      <WinrateTable result={question.result} whatifMoves={question.whatif_moves} />
+      {/* Analysis: dead/live verdict or winrate table (supporting detail) */}
+      {question.kind === 'life_death' && question.life_death ? (
+        <LifeDeathVerdict lifeDeath={question.life_death} />
+      ) : question.result ? (
+        <WinrateTable result={question.result} whatifMoves={question.whatif_moves} />
+      ) : null}
+
+      {/* Reply preview — the EXACT localized text that will be posted (matches the
+          comment's language). This is what you're approving. */}
+      {question.reply_preview && (
+        <div className="mt-2 rounded-lg border border-blue-200 dark:border-blue-900 bg-blue-50/60 dark:bg-blue-950/20 p-3">
+          <div className="text-[11px] uppercase tracking-wide text-blue-700 dark:text-blue-300 mb-1">
+            Reply to be posted
+          </div>
+          <p className="text-sm whitespace-pre-wrap leading-relaxed text-foreground">{question.reply_preview}</p>
+        </div>
+      )}
 
       {/* Action buttons — hidden once posted or skipped */}
       {!isDone && (
