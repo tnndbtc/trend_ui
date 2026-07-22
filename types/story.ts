@@ -136,8 +136,9 @@ export interface EngineStatus {
 export interface GamesChannelStats {
   channel_id:            string
   channel_name:          string | null
-  subscriber_count:      number | null   // 0 when hidden by YouTube (<1K)
-  real_subscriber_count: number | null   // exact count via Analytics API
+  subscriber_count:      number | null   // Data API; authoritative unless hidden
+  subscriber_count_hidden: boolean | null // true = owner hid the public count
+  real_subscriber_count: number | null   // Analytics fallback; lags ~2-3 days
   video_count:           number | null
   view_count:            number | null
   fetched_at:            string | null

@@ -1029,6 +1029,33 @@ export default function GamesPage() {
     ? videosWithRetention.reduce((s, v) => s + (v.avg_view_pct ?? 0), 0) / videosWithRetention.length
     : null
 
+  // Subscriber count source selection.
+  //
+  // subscriber_count (Data API) is authoritative and current whenever YouTube
+  // returns it. real_subscriber_count is derived from Analytics
+  // subscribersGained-subscribersLost, which has no data for the last ~2-3 days
+  // — so it under-reports any recent subscribers and must only be used as a
+  // fallback for channels that hide their public count.
+  const subscriberDisplay = ((): { value: string; sub: string } => {
+    const dataApi   = channel?.subscriber_count ?? null
+    const analytics = channel?.real_subscriber_count ?? null
+    const hidden    = channel?.subscriber_count_hidden === true
+
+    // Normal case: YouTube gives us the real number.
+    if (!hidden && dataApi != null) {
+      return { value: fmt(dataApi), sub: 'channel total' }
+    }
+    // Fallback only. Note we do NOT fall back to dataApi here: when the count
+    // is hidden YouTube reports it as 0, which would render a bogus "0".
+    if (analytics != null) {
+      return {
+        value: fmt(analytics),
+        sub: hidden ? 'est. — public count hidden' : 'est. — lags ~3 days',
+      }
+    }
+    return { value: '—', sub: 'channel total' }
+  })()
+
   const isFamousTab   = activeTab === 'famous-en' || activeTab === 'famous-zh'
   const isCommentsTab = activeTab === 'comments'
 
@@ -1173,14 +1200,8 @@ export default function GamesPage() {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
             <StatCard
               label="Subscribers"
-              value={
-                channel?.real_subscriber_count != null
-                  ? fmt(channel.real_subscriber_count)
-                  : channel?.subscriber_count
-                    ? fmt(channel.subscriber_count)
-                    : '—'
-              }
-              sub="channel total"
+              value={subscriberDisplay.value}
+              sub={subscriberDisplay.sub}
             />
             <StatCard
               label="Videos"
