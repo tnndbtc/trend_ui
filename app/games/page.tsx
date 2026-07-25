@@ -5,12 +5,13 @@ import { fetchGamesChannelStats, fetchGamesVideos, fetchGamesAudienceCountries, 
 import type { GamesChannelStats, GamesVideoRow, GamesComment, GamesCountryRow, GamesSubtitleRow, StrategyChange, VideoWithCommentQuestions, CommentQuestion, WinrateResult, LifeDeathResult } from '@/types/story'
 import SubscriberSplitCard from '@/components/SubscriberSplitCard'
 
-type GamesTab = 'en' | 'zh' | 'ja' | 'famous-en' | 'famous-zh' | 'comments'
+type GamesTab = 'en' | 'zh' | 'ja' | 'ko' | 'famous-en' | 'famous-zh' | 'comments'
 
 const TAB_META: Record<GamesTab, { label: string; playlist?: string; emoji: string }> = {
   'en':        { label: 'KataGo',          emoji: '♟',   playlist: 'PL5Xv3qmUSUqUrG-NTMe2IjNP_aHcI2m-w' },
   'zh':        { label: 'KataGo Chinese',  emoji: '围棋', playlist: 'PL5Xv3qmUSUqWDllUJi9BEP_3basoWCHv0' },
   'ja':        { label: 'KataGo Japanese', emoji: '囲碁', playlist: 'PL5Xv3qmUSUqVTvMeP1c63Xv6LrC8CCi-7' },
+  'ko':        { label: 'KataGo Korean',   emoji: '바둑', playlist: 'PLQBYW9JL6LFA' },
   'famous-en': { label: 'Famous EN',       emoji: '🏆' },
   'famous-zh': { label: 'Famous ZH',       emoji: '🏆' },
   'comments':  { label: 'Comments',        emoji: '💬' },
@@ -986,7 +987,28 @@ export default function GamesPage() {
       .finally(() => setLoading(false))
   }
 
-  useEffect(() => { load() }, [])
+  // On mount: render immediately from the cached DB (fast), THEN pull LIVE from
+  // YouTube in the background (same mechanism as the Refresh button — spawns
+  // fetch_games_analytics.py, which live-scans the channel and upserts any newly
+  // published videos) and re-load. This makes a plain page reload reflect the live
+  // playlist (e.g. "KataGo Korean" 2 → 4), not just the lagging cache.
+  useEffect(() => {
+    let cancelled = false
+    load()   // fast initial paint from the DB
+    ;(async () => {
+      setRefreshing(true)
+      try {
+        await fetch('/api/games/refresh', { method: 'POST' })
+        await new Promise(r => setTimeout(r, 15_000))
+        if (!cancelled) await load()   // re-load with the freshly-synced data
+      } catch {
+        /* keep the cached view if the live refresh fails */
+      } finally {
+        if (!cancelled) setRefreshing(false)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [])
 
   async function handleRefresh() {
     setRefreshing(true)
@@ -1006,6 +1028,7 @@ export default function GamesPage() {
   const selfplayEn  = useMemo(() => videos.filter(v => (v.lang ?? 'en') === 'en' && !v.is_famous), [videos])
   const selfplayZh  = useMemo(() => videos.filter(v => v.lang === 'zh' && !v.is_famous), [videos])
   const selfplayJa  = useMemo(() => videos.filter(v => v.lang === 'ja' && !v.is_famous), [videos])
+  const selfplayKo  = useMemo(() => videos.filter(v => v.lang === 'ko' && !v.is_famous), [videos])
   const famousEn    = useMemo(() => videos.filter(v => v.is_famous && (v.lang ?? 'en') === 'en'), [videos])
   const famousZh    = useMemo(() => videos.filter(v => v.is_famous && v.lang === 'zh'), [videos])
 
@@ -1013,6 +1036,7 @@ export default function GamesPage() {
     'en':        selfplayEn,
     'zh':        selfplayZh,
     'ja':        selfplayJa,
+    'ko':        selfplayKo,
     'famous-en': famousEn,
     'famous-zh': famousZh,
     'comments':  [],   // not used; CommentsReview fetches its own data
@@ -1106,7 +1130,7 @@ export default function GamesPage() {
       {/* ── tabs ── */}
       <div className="flex gap-1 mb-6 border-b">
         {/* Self-play tabs */}
-        {(['en', 'zh', 'ja'] as GamesTab[]).map(tab => {
+        {(['en', 'zh', 'ja', 'ko'] as GamesTab[]).map(tab => {
           const meta  = TAB_META[tab]
           const count = tabVideos[tab].length
           return (
@@ -1224,7 +1248,7 @@ export default function GamesPage() {
           </div>
 
           {/* ── live subscriber vs non-subscriber split (per language tab) ── */}
-          {(activeTab === 'en' || activeTab === 'zh' || activeTab === 'ja') && (
+          {(activeTab === 'en' || activeTab === 'zh' || activeTab === 'ja' || activeTab === 'ko') && (
             <SubscriberSplitCard lang={activeTab} />
           )}
 

@@ -162,7 +162,7 @@ export interface GamesVideoRow {
   comment_count:     number | null
   avg_view_duration: number | null   // seconds
   avg_view_pct:      number | null   // %
-  lang:              string | null   // 'en' = KataGo, 'zh' = KataGo Chinese, 'ja' = KataGo Japanese playlist
+  lang:              string | null   // 'en' = KataGo, 'zh' = KataGo Chinese, 'ja' = KataGo Japanese, 'ko' = KataGo Korean playlist
   is_famous:         number | null   // 1 = famous game, 0 = ai_selfplay
   ab_variant:        string | null   // 'male-en' | 'female-en' | 'male-zh' | 'female-zh'
   fetched_at:        string | null
@@ -182,7 +182,7 @@ export interface GamesSubtitleRow {
 }
 
 // Live subscriber vs non-subscriber view split for one KataGo language tab
-// (GET /api/games/subscriber-split?lang=en|zh|ja). Fetched fresh per page load.
+// (GET /api/games/subscriber-split?lang=en|zh|ja|ko). Fetched fresh per page load.
 export interface SubscriberSplitWindow {
   key:            string   // '7d' | '28d' | '90d'
   label:          string

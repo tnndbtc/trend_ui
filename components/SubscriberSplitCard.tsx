@@ -2,7 +2,7 @@
 
 /**
  * SubscriberSplitCard — live subscriber vs non-subscriber view split for one
- * KataGo language tab (en | zh | ja).
+ * KataGo language tab (en | zh | ja | ko).
  *
  * Fetches GET /api/games/subscriber-split?lang=… fresh on mount and whenever
  * `lang` changes (no cached/refresh step). Renders three KPI windows, a weekly
@@ -138,7 +138,7 @@ function SplitBars({ data }: { data: GamesSubscriberSplit }) {
   )
 }
 
-export default function SubscriberSplitCard({ lang }: { lang: 'en' | 'zh' | 'ja' }) {
+export default function SubscriberSplitCard({ lang }: { lang: 'en' | 'zh' | 'ja' | 'ko' }) {
   const [data, setData]       = useState<GamesSubscriberSplit | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState(false)

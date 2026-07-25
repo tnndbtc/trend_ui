@@ -122,12 +122,12 @@ export async function fetchGamesSubtitleLangs(): Promise<GamesSubtitleRow[]> {
 
 /**
  * Fetch the live subscriber vs non-subscriber view split for one KataGo
- * language tab (en | zh | ja). Runs a YouTube Analytics query server-side on
+ * language tab (en | zh | ja | ko). Runs a YouTube Analytics query server-side on
  * every call — no cached/refresh step — so it reflects the latest data
  * (through ~72h ago). Returns available=false with a note when YouTube
  * withholds the breakdown for a low-volume language.
  */
-export async function fetchGamesSubscriberSplit(lang: 'en' | 'zh' | 'ja'): Promise<GamesSubscriberSplit> {
+export async function fetchGamesSubscriberSplit(lang: 'en' | 'zh' | 'ja' | 'ko'): Promise<GamesSubscriberSplit> {
   return storyFetch<GamesSubscriberSplit>('/games/subscriber-split', { lang })
 }
 
