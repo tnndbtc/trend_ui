@@ -1013,7 +1013,12 @@ export default function GamesPage() {
   async function handleRefresh() {
     setRefreshing(true)
     try {
-      await fetch('/api/games/refresh', { method: 'POST' })
+      // Explicit user action -> full sweep (per-video retention + comment
+      // bodies, ~875 API calls), server-side rate-limited to once per 30 min.
+      // The on-mount auto-refresh above deliberately omits scope, getting the
+      // ~21-call quick path: it still discovers newly published videos and
+      // updates views/likes, which is all that moves in real time.
+      await fetch('/api/games/refresh?scope=full', { method: 'POST' })
       await new Promise(r => setTimeout(r, 15_000))
       setLoading(true)
       setError(null)
