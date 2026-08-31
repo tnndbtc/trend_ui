@@ -1,9 +1,10 @@
 'use client'
 
 import { useEffect, useState, useMemo } from 'react'
-import { fetchGamesChannelStats, fetchGamesVideos, fetchGamesAudienceCountries, fetchGamesSubtitleLangs, fetchGamesStrategyChanges, fetchCommentQuestions, approveCommentQuestion, skipCommentQuestion } from '@/lib/api/stories'
+import { fetchGamesChannelStats, fetchGamesVideos, fetchGamesAudienceCountries, fetchGamesSubtitleLangs, fetchGamesStrategyChanges, fetchGamesSubscriberSplit, fetchCommentQuestions, approveCommentQuestion, skipCommentQuestion } from '@/lib/api/stories'
 import type { GamesChannelStats, GamesVideoRow, GamesComment, GamesCountryRow, GamesSubtitleRow, StrategyChange, VideoWithCommentQuestions, CommentQuestion, WinrateResult, LifeDeathResult } from '@/types/story'
 import SubscriberSplitCard from '@/components/SubscriberSplitCard'
+import AudienceCountryList from '@/components/AudienceCountryList'
 
 type GamesTab = 'en' | 'zh' | 'ja' | 'ko' | 'famous-en' | 'famous-zh' | 'comments'
 
@@ -48,64 +49,7 @@ function fmtTime(iso: string | null | undefined): string {
   })
 }
 
-function countryFlag(code: string): string {
-  return code.toUpperCase().replace(/[A-Z]/g, c =>
-    String.fromCodePoint(c.charCodeAt(0) + 0x1F1A5)
-  )
-}
-
-function countryName(code: string): string {
-  try {
-    return new Intl.DisplayNames(['en'], { type: 'region' }).of(code) ?? code
-  } catch {
-    return code
-  }
-}
-
 // ── sub-components ────────────────────────────────────────────────────────────
-
-function AudienceMap({ rows }: { rows: GamesCountryRow[] }) {
-  if (rows.length === 0) return null
-  const totalViews = rows.reduce((s, r) => s + r.views, 0)
-  const display    = rows.slice(0, 15)
-  return (
-    <div className="rounded-xl border bg-card p-4 mb-6">
-      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-3">
-        Viewer Countries · lifetime
-      </p>
-      <div className="space-y-1.5">
-        {display.map(r => {
-          const pct = totalViews > 0 ? (r.views / totalViews) * 100 : 0
-          return (
-            <div key={r.country} className="flex items-center gap-2 text-sm">
-              <span className="text-base leading-none w-6 text-center">{countryFlag(r.country)}</span>
-              <span className="w-24 text-muted-foreground truncate" title={countryName(r.country)}>
-                {countryName(r.country)}
-              </span>
-              <div className="flex-1 bg-muted rounded-full h-1.5 overflow-hidden">
-                <div
-                  className="bg-primary h-full rounded-full"
-                  style={{ width: `${pct.toFixed(1)}%` }}
-                />
-              </div>
-              <span className="w-10 text-right tabular-nums text-muted-foreground text-xs">
-                {pct.toFixed(1)}%
-              </span>
-              <span className="w-12 text-right tabular-nums text-xs">
-                {fmt(r.views)}
-              </span>
-            </div>
-          )
-        })}
-      </div>
-      {rows.length > 15 && (
-        <p className="text-xs text-muted-foreground mt-2">
-          +{rows.length - 15} more countries
-        </p>
-      )}
-    </div>
-  )
-}
 
 function SubtitleLangChart({ rows }: { rows: GamesSubtitleRow[] }) {
   const total = rows.reduce((s, r) => s + r.views, 0)
@@ -269,6 +213,18 @@ function VideoCard({ video }: { video: GamesVideoRow }) {
             )}
             {!hasComments && (video.comment_count ?? 0) === 0 && (
               <span className="text-muted-foreground/60">💬 no comments</span>
+            )}
+            {/* comment_count (SQLite, live, includes the channel's own auto-posted
+                comment) can be >0 while `comments` (go_db, filtered to exclude the
+                channel's own author_channel_id, synced nightly) is still empty —
+                either the nightly sync hasn't caught up yet, or every counted
+                comment was posted by the channel itself. Either way there is no
+                real viewer comment to show right now, so say that plainly instead
+                of rendering nothing. */}
+            {!hasComments && (video.comment_count ?? 0) > 0 && (
+              <span className="text-muted-foreground/60" title="No viewer comments yet — may still be syncing">
+                💬 {video.comment_count} (no viewer comments)
+              </span>
             )}
           </div>
         </div>
@@ -571,8 +527,8 @@ function WinrateTable({ result, whatifMoves }: { result: WinrateResult; whatifMo
           <tr className="border-b bg-muted/40">
             <th className="text-left px-3 py-1.5 font-medium text-muted-foreground">Position</th>
             <th className="text-right px-3 py-1.5 font-medium text-muted-foreground">Black Win%</th>
-            <th className="text-right px-3 py-1.5 font-medium text-muted-foreground">Score</th>
-            <th className="text-right px-3 py-1.5 font-medium text-muted-foreground">Δ Win%</th>
+            <th className="text-right px-3 py-1.5 font-medium text-muted-foreground">Black Score</th>
+            <th className="text-right px-3 py-1.5 font-medium text-muted-foreground">Δ Black Win%</th>
           </tr>
         </thead>
         <tbody>
@@ -1254,11 +1210,13 @@ export default function GamesPage() {
 
           {/* ── live subscriber vs non-subscriber split (per language tab) ── */}
           {(activeTab === 'en' || activeTab === 'zh' || activeTab === 'ja' || activeTab === 'ko') && (
-            <SubscriberSplitCard lang={activeTab} />
+            <SubscriberSplitCard fetchKey={activeTab} fetchFn={fetchGamesSubscriberSplit} />
           )}
 
           {/* ── viewer country + subtitle (only on selfplay tabs to avoid clutter) ── */}
-          {!isFamousTab && countries.length > 0 && <AudienceMap rows={countries} />}
+          {!isFamousTab && countries.length > 0 && (
+            <AudienceCountryList rows={countries.map(r => ({ code: r.country, views: r.views }))} />
+          )}
           {!isFamousTab && <SubtitleLangChart rows={subtitles} />}
 
           {/* ── notices (selfplay only) ── */}

@@ -2,25 +2,27 @@
 
 /**
  * SubscriberSplitCard — live subscriber vs non-subscriber view split for one
- * KataGo language tab (en | zh | ja | ko).
+ * channel/language tab. Generic over any endpoint whose response matches
+ * SubscriberSplitData — used both by the KataGo page (en|zh|ja|ko, via
+ * fetchGamesSubscriberSplit) and the Performance page (en|zh deep-story
+ * channels, via fetchChannelSubscriberSplit).
  *
- * Fetches GET /api/games/subscriber-split?lang=… fresh on mount and whenever
- * `lang` changes (no cached/refresh step). Renders three KPI windows, a weekly
- * "% subscribed" trend line, and per-window split bars — mirroring the mockup.
+ * Fetches fresh on mount and whenever `fetchKey` changes (no cached/refresh
+ * step). Renders three KPI windows, a weekly "% subscribed" trend line, and
+ * per-window split bars — mirroring the mockup.
  *
  * Honest-data details:
  *   - The most recent week is usually partial (few views); it is drawn hollow
  *     and excluded from the solid trend line so a small-sample spike can't read
  *     as a real jump.
- *   - When YouTube withholds the breakdown for a low-volume language, the API
+ *   - When YouTube withholds the breakdown for a low-volume channel, the API
  *     returns available=false and we show its note instead of empty charts.
  *   - "New vs returning viewers" is not offered by the YouTube API; this
  *     subscriber split is the closest available signal (stated in the footer).
  */
 
 import { useEffect, useState } from 'react'
-import { fetchGamesSubscriberSplit } from '@/lib/api/stories'
-import type { GamesSubscriberSplit } from '@/types/story'
+import type { SubscriberSplitData } from '@/types/story'
 
 const SERIES_STYLE = `
   .subsplit { --sub:#B8791C; --sub-soft:#efe0c4; --nonsub:#3A6FBF; }
@@ -32,7 +34,7 @@ function nfmt(n: number): string {
 }
 
 // ── weekly "% subscribed" trend line ──────────────────────────────────────────
-function TrendLine({ data }: { data: GamesSubscriberSplit }) {
+function TrendLine({ data }: { data: SubscriberSplitData }) {
   const weeks = data.weeks
   if (weeks.length < 2) {
     return <p className="text-sm text-muted-foreground">Not enough weekly history yet.</p>
@@ -102,7 +104,7 @@ function TrendLine({ data }: { data: GamesSubscriberSplit }) {
 }
 
 // ── per-window proportional split bars ────────────────────────────────────────
-function SplitBars({ data }: { data: GamesSubscriberSplit }) {
+function SplitBars({ data }: { data: SubscriberSplitData }) {
   const W = 320, H = 200, mL = 4, mR = 8, mT = 6
   const iw = W - mL - mR, rowH = 34, gap = 30
   return (
@@ -138,8 +140,14 @@ function SplitBars({ data }: { data: GamesSubscriberSplit }) {
   )
 }
 
-export default function SubscriberSplitCard({ lang }: { lang: 'en' | 'zh' | 'ja' | 'ko' }) {
-  const [data, setData]       = useState<GamesSubscriberSplit | null>(null)
+export default function SubscriberSplitCard<K extends string>({
+  fetchKey,
+  fetchFn,
+}: {
+  fetchKey: K
+  fetchFn:  (key: K) => Promise<SubscriberSplitData>
+}) {
+  const [data, setData]       = useState<SubscriberSplitData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState(false)
 
@@ -148,12 +156,12 @@ export default function SubscriberSplitCard({ lang }: { lang: 'en' | 'zh' | 'ja'
     setLoading(true)
     setError(false)
     setData(null)
-    fetchGamesSubscriberSplit(lang)
+    fetchFn(fetchKey)
       .then(d => { if (!cancelled) setData(d) })
       .catch(() => { if (!cancelled) setError(true) })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
-  }, [lang])
+  }, [fetchKey, fetchFn])
 
   return (
     <div className="subsplit rounded-xl border bg-card p-4 mb-6">

@@ -1,8 +1,10 @@
 'use client'
 
 import { useEffect, useState, useMemo } from 'react'
-import { fetchChannelVideos, fetchStrategyChanges, refreshChannelAnalytics } from '@/lib/api/stories'
-import type { ChannelVideoRow, StrategyChange } from '@/types/story'
+import { fetchChannelVideos, fetchStrategyChanges, refreshChannelAnalytics, fetchChannelAudience, fetchChannelSubscriberSplit } from '@/lib/api/stories'
+import type { ChannelVideoRow, StrategyChange, ChannelAudienceSnapshot } from '@/types/story'
+import SubscriberSplitCard from '@/components/SubscriberSplitCard'
+import AudienceCountryList from '@/components/AudienceCountryList'
 
 // ── constants ─────────────────────────────────────────────────────────────────
 
@@ -87,6 +89,28 @@ function strategyForDate(dateStr: string, strategies: StrategyChange[]): Strateg
   return strategies[strategies.length - 1]
 }
 
+const TRAFFIC_SOURCE_LABELS: Record<string, string> = {
+  YT_SEARCH:         'YouTube Search',
+  SUGGESTED_VIDEOS:  'Suggested',
+  BROWSE_FEATURES:   'Browse/Home',
+  EXT_URL:           'External',
+  NOTIFICATION:      'Notification',
+  YT_CHANNEL:        'Channel page',
+  NO_LINK_OTHER:     'Direct/Other',
+  PLAYLIST:          'Playlist',
+  SHORTS:            'Shorts feed',
+  SUBSCRIBER:        'Subscriber feed',
+}
+
+/** Top traffic source key + its share of total views, or null if no data. */
+function topTrafficSource(traffic: Record<string, number> | null | undefined): { key: string; pct: number } | null {
+  if (!traffic || Object.keys(traffic).length === 0) return null
+  const total = Object.values(traffic).reduce((s, v) => s + v, 0)
+  if (total === 0) return null
+  const [key, views] = Object.entries(traffic).sort((a, b) => b[1] - a[1])[0]
+  return { key, pct: (views / total) * 100 }
+}
+
 function retentionColor(pct: number | null | undefined): string {
   if (pct == null) return 'text-muted-foreground'
   if (pct >= 30)   return 'text-green-600 dark:text-green-400'
@@ -131,6 +155,7 @@ function VideoCard({ video }: { video: ChannelVideoRow }) {
   const ytUrl     = `https://www.youtube.com/watch?v=${video.video_id}`
   const isPending = video.analytics_pulled_at === null
   const isNoData  = video.analytics_pulled_at === 'no_data'
+  const topSrc    = topTrafficSource(video.traffic_sources)
 
   return (
     <div className="rounded-xl border bg-card overflow-hidden">
@@ -160,6 +185,20 @@ function VideoCard({ video }: { video: ChannelVideoRow }) {
             </span></span>
             {(video.like_count ?? 0) > 0 && (
               <span>👍 <span className="font-medium text-foreground">{fmt(video.like_count)}</span></span>
+            )}
+            {(video.shares ?? 0) > 0 && (
+              <span>🔁 <span className="font-medium text-foreground">{fmt(video.shares)}</span></span>
+            )}
+            {topSrc && (
+              <span title={`${topSrc.pct.toFixed(0)}% of views from this source`}>
+                🧭 <span className="font-medium text-foreground">
+                  {TRAFFIC_SOURCE_LABELS[topSrc.key] ?? topSrc.key}
+                </span>
+                <span className="text-muted-foreground/70"> {topSrc.pct.toFixed(0)}%</span>
+              </span>
+            )}
+            {video.has_retention_curve && (
+              <span title="Audience retention curve available">📈</span>
             )}
             {isPending && <span className="text-muted-foreground/60">⏳ pending</span>}
             {isNoData  && <span className="text-muted-foreground/60">📭 no data</span>}
@@ -383,6 +422,105 @@ function WeekBlock({
   )
 }
 
+// ── AudiencePanel ────────────────────────────────────────────────────────────
+
+const AGE_GENDER_LABELS: Record<string, string> = {
+  male: '♂', female: '♀', user_specified: '⚧', unknown: '?',
+}
+
+function AudienceBar({ label, pct }: { label: string; pct: number }) {
+  return (
+    <div className="flex items-center gap-2 text-xs">
+      <span className="w-24 flex-shrink-0 text-muted-foreground truncate">{label}</span>
+      <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
+        <div className="h-full bg-foreground/60 rounded-full" style={{ width: `${Math.min(100, pct)}%` }} />
+      </div>
+      <span className="w-10 flex-shrink-0 text-right tabular-nums text-foreground">{pct.toFixed(0)}%</span>
+    </div>
+  )
+}
+
+function AudiencePanel({ audience }: { audience: ChannelAudienceSnapshot | null }) {
+  const [expanded, setExpanded] = useState(false)
+  if (!audience) return null
+
+  const deviceTotal   = audience.device.reduce((s, r) => s + r.metric_value, 0)
+  // Country is rendered as its own standalone "Viewer Countries" section
+  // (AudienceCountryList) elsewhere on the page, not in this panel — so it's
+  // excluded here to avoid claiming "no data" when only device/age_gender
+  // are actually empty for this panel.
+  const hasAnyData    = audience.device.length + audience.age_gender.length > 0
+
+  return (
+    <div className="rounded-xl border overflow-hidden mb-5">
+      <button
+        onClick={() => setExpanded(e => !e)}
+        className="w-full px-4 py-3 flex items-center justify-between gap-3 bg-muted/30 hover:bg-muted/50 transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          <span className="font-semibold text-sm">👥 Audience</span>
+          {audience.fetched_at && (
+            <span className="text-xs text-muted-foreground">as of {fmtTime(audience.fetched_at)}</span>
+          )}
+        </div>
+        <span className="text-xs text-muted-foreground">{expanded ? '收起 ▲' : '展开 ▼'}</span>
+      </button>
+
+      {expanded && (
+        <div className="px-4 py-4">
+          {!hasAnyData && (
+            <p className="text-sm text-muted-foreground">
+              No audience data yet — populated by the next fetch_analytics.py run.
+            </p>
+          )}
+
+          {audience.device.length > 0 && (
+            <div className="mb-4">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
+                Device
+              </p>
+              <div className="flex flex-col gap-1.5">
+                {audience.device.map(r => (
+                  <AudienceBar key={r.dim_key} label={r.dim_key}
+                    pct={deviceTotal > 0 ? (r.metric_value / deviceTotal) * 100 : 0} />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {audience.age_gender.length > 0 && (
+            <div>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
+                Age &amp; gender (% of viewers)
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {audience.age_gender
+                  .slice()
+                  .sort((a, b) => b.metric_value - a.metric_value)
+                  .map(r => {
+                    const [age, gender] = r.dim_key.split('|')
+                    return (
+                      <span key={r.dim_key}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-muted text-xs text-muted-foreground">
+                        <span className="font-medium text-foreground">{r.metric_value.toFixed(0)}%</span>
+                        <span>{age.replace('age', '')}{AGE_GENDER_LABELS[gender] ?? gender}</span>
+                      </span>
+                    )
+                  })}
+              </div>
+            </div>
+          )}
+
+          <p className="text-[11px] text-muted-foreground/50 mt-3">
+            Channel-level snapshot, not per-video · YouTube withholds some dimensions
+            (e.g. age/gender) until the channel has enough views to disaggregate
+          </p>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── page ──────────────────────────────────────────────────────────────────────
 
 export default function PerformancePage() {
@@ -391,6 +529,7 @@ export default function PerformancePage() {
   const [loadingLang,  setLoadingLang]  = useState<Record<Lang, boolean>>({ en: true, zh: true })
   const [errorLang,    setErrorLang]    = useState<Record<Lang, string | null>>({ en: null, zh: null })
   const [strategies,   setStrategies]   = useState<StrategyChange[]>([])
+  const [audienceByLang, setAudienceByLang] = useState<Record<Lang, ChannelAudienceSnapshot | null>>({ en: null, zh: null })
   const [refreshing,   setRefreshing]   = useState(false)
 
   function loadAllLangs() {
@@ -402,6 +541,9 @@ export default function PerformancePage() {
         .then(vids => setVideosByLang(prev => ({ ...prev, [lang]: vids })))
         .catch(e  => setErrorLang(prev => ({ ...prev, [lang]: e.message })))
         .finally(()  => setLoadingLang(prev => ({ ...prev, [lang]: false })))
+      fetchChannelAudience(lang)
+        .then(a => setAudienceByLang(prev => ({ ...prev, [lang]: a })))
+        .catch(() => {})   // audience panel just stays hidden on failure
     }
   }
 
@@ -532,6 +674,17 @@ export default function PerformancePage() {
             <span>≥30% <span className="text-green-600 dark:text-green-400 font-medium">green</span></span>
             <span>· &lt;15% <span className="text-orange-500 font-medium">orange</span></span>
           </div>
+
+          {/* ── live subscriber vs non-subscriber split ── */}
+          <SubscriberSplitCard fetchKey={activeLang} fetchFn={fetchChannelSubscriberSplit} />
+
+          {/* ── viewer countries ── */}
+          <AudienceCountryList
+            rows={(audienceByLang[activeLang]?.country ?? []).map(r => ({ code: r.dim_key, views: r.metric_value }))}
+          />
+
+          {/* ── audience snapshot (device / age+gender) ── */}
+          <AudiencePanel audience={audienceByLang[activeLang]} />
 
           {/* ── weekly breakdown by strategy ── */}
           <div className="flex flex-col gap-4 mb-10">

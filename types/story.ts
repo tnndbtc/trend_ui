@@ -202,7 +202,12 @@ export interface SubscriberSplitWeek {
   partial:        boolean  // week not yet complete → drawn hollow
 }
 
-export interface GamesSubscriberSplit {
+// Shared shape for both subscriber-split endpoints — KataGo's
+// /api/games/subscriber-split?lang=en|zh|ja|ko and the deep-story channels'
+// /api/analytics/channel/subscriber-split?upload_profile=en|zh. Same backend
+// aggregation logic (see channel_subscriber_split.py's module docstring),
+// different data sources.
+export interface SubscriberSplitData {
   lang:        string
   channel_id:  string | null
   through:     string | null   // last day included (72h latency)
@@ -212,6 +217,11 @@ export interface GamesSubscriberSplit {
   windows:     SubscriberSplitWindow[]
   weeks:       SubscriberSplitWeek[]
 }
+
+/** @deprecated use SubscriberSplitData — kept as an alias for existing call sites. */
+export type GamesSubscriberSplit = SubscriberSplitData
+
+export type ChannelSubscriberSplit = SubscriberSplitData
 
 // ---------------------------------------------------------------------------
 // Story-engine channel analytics  (GET /api/analytics/channel?lang=en|zh)
@@ -230,6 +240,46 @@ export interface ChannelVideoRow {
   like_count:          number | null
   comment_count:       number | null
   analytics_pulled_at: string | null     // null=pending, 'no_data'=gave up, ISO=fetched
+  traffic_sources:     Record<string, number> | null   // {"YT_SEARCH": 42, "SUGGESTED_VIDEOS": 31, ...}
+  watch_time_hours:    number | null
+  shares:              number | null
+  subscribers_gained:  number | null
+  dislikes:            number | null     // Analytics API owner-only estimate
+  has_retention_curve: boolean           // true if a per-video retention curve was fetched
+}
+
+// ---------------------------------------------------------------------------
+// Channel Audience-tab snapshot  (GET /api/analytics/channel/audience?upload_profile=en|zh)
+// ---------------------------------------------------------------------------
+
+export interface AudienceDimensionRow {
+  dim_key:      string    // e.g. 'US', 'age25-34|male', 'MOBILE', 'ANDROID', 'WATCH'
+  metric_value: number    // views (count) for most dimensions, viewer % for age_gender
+}
+
+export interface ChannelAudienceSnapshot {
+  upload_profile:     string
+  fetched_at:         string | null
+  country:            AudienceDimensionRow[]
+  age_gender:         AudienceDimensionRow[]
+  device:             AudienceDimensionRow[]
+  os:                 AudienceDimensionRow[]
+  playback_location:  AudienceDimensionRow[]
+}
+
+// ---------------------------------------------------------------------------
+// Per-video audience retention curve  (GET /api/analytics/video/{id}/retention-curve)
+// ---------------------------------------------------------------------------
+
+export interface RetentionCurvePoint {
+  elapsed_video_time_pct: number          // 0.00-1.00, position in the video
+  audience_watch_ratio:   number | null   // fraction of viewers still watching
+  relative_performance:   number | null   // vs similar-length YouTube videos, >0 = better than typical
+}
+
+export interface VideoRetentionCurve {
+  video_id: string
+  points:   RetentionCurvePoint[]
 }
 
 export interface StrategyChange {

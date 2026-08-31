@@ -5,7 +5,7 @@
  * Next.js rewrites proxy /api/stories/* to the story_engine backend.
  */
 
-import type { Story, StoriesListResponse, StorySetSummary, StoryLang, FormatType, YoutubeAnalyticRow, YoutubeSubscriber, StoryWithComments, GamesChannelStats, GamesVideoRow, GamesCountryRow, GamesSubtitleRow, GamesSubscriberSplit, ChannelVideoRow, StrategyChange, VideoWithCommentQuestions } from '@/types/story'
+import type { Story, StoriesListResponse, StorySetSummary, StoryLang, FormatType, YoutubeAnalyticRow, YoutubeSubscriber, StoryWithComments, GamesChannelStats, GamesVideoRow, GamesCountryRow, GamesSubtitleRow, GamesSubscriberSplit, ChannelSubscriberSplit, ChannelVideoRow, ChannelAudienceSnapshot, VideoRetentionCurve, StrategyChange, VideoWithCommentQuestions } from '@/types/story'
 
 const STORY_API_BASE = process.env.NEXT_PUBLIC_STORY_API_BASE_URL || '/api'
 
@@ -149,6 +149,36 @@ export async function fetchChannelVideos(lang: 'en' | 'zh'): Promise<ChannelVide
 
 export async function fetchStrategyChanges(): Promise<StrategyChange[]> {
   return storyFetch<StrategyChange[]>('/analytics/strategy-changes')
+}
+
+/**
+ * Fetch the channel-level Audience-tab snapshot (country, age+gender, device,
+ * OS, playback location) for one profile. Full-replace snapshot from the most
+ * recent fetch_analytics.py run, not a time series — see .fetched_at.
+ */
+export async function fetchChannelAudience(uploadProfile: 'en' | 'zh'): Promise<ChannelAudienceSnapshot> {
+  return storyFetch<ChannelAudienceSnapshot>('/analytics/channel/audience', { upload_profile: uploadProfile })
+}
+
+/**
+ * Fetch the live subscriber vs non-subscriber view split for one deep-story
+ * channel (en | zh). Sibling of fetchGamesSubscriberSplit — same response
+ * shape, runs a YouTube Analytics query server-side on every call (no
+ * cached/refresh step). Returns available=false with a note when YouTube
+ * withholds the breakdown for a low-volume channel.
+ */
+export async function fetchChannelSubscriberSplit(uploadProfile: 'en' | 'zh'): Promise<ChannelSubscriberSplit> {
+  return storyFetch<ChannelSubscriberSplit>('/analytics/channel/subscriber-split', { upload_profile: uploadProfile })
+}
+
+/**
+ * Fetch the audience retention curve for one video (~100 points: what
+ * fraction of viewers were still watching at each point in the video, and
+ * how that compares to similar-length videos on YouTube). Empty points array
+ * if never fetched — check ChannelVideoRow.has_retention_curve first.
+ */
+export async function fetchVideoRetentionCurve(videoId: string): Promise<VideoRetentionCurve> {
+  return storyFetch<VideoRetentionCurve>(`/analytics/video/${videoId}/retention-curve`)
 }
 
 /**
