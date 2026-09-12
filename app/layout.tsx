@@ -64,6 +64,12 @@ export default function RootLayout({
                 >
                   ♟ KataGo
                 </a>
+                <a
+                  href="/app/services"
+                  className="px-3 py-1.5 text-sm font-medium rounded-md hover:bg-muted transition-colors text-foreground/70 hover:text-foreground"
+                >
+                  🩺 Services
+                </a>
               </nav>
             </div>
           </header>
