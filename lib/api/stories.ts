@@ -5,7 +5,7 @@
  * Next.js rewrites proxy /api/stories/* to the story_engine backend.
  */
 
-import type { Story, StoriesListResponse, StorySetSummary, StoryLang, FormatType, YoutubeAnalyticRow, YoutubeSubscriber, StoryWithComments, GamesChannelStats, GamesVideoRow, GamesCountryRow, GamesSubtitleRow, GamesSubscriberSplit, ChannelSubscriberSplit, ChannelVideoRow, ChannelAudienceSnapshot, VideoRetentionCurve, StrategyChange, VideoWithCommentQuestions } from '@/types/story'
+import type { Story, StoriesListResponse, StorySetSummary, StoryLang, FormatType, YoutubeAnalyticRow, YoutubeSubscriber, StoryWithComments, GamesChannelStats, GamesVideoRow, GamesCountryRow, GamesSubtitleRow, GamesSubscriberSplit, ChannelSubscriberSplit, ChannelVideoRow, ShortVideoRow, ChannelAudienceSnapshot, VideoRetentionCurve, StrategyChange, VideoWithCommentQuestions } from '@/types/story'
 
 const STORY_API_BASE = process.env.NEXT_PUBLIC_STORY_API_BASE_URL || '/api'
 
@@ -145,6 +145,16 @@ export async function fetchGamesStrategyChanges(): Promise<StrategyChange[]> {
  */
 export async function fetchChannelVideos(lang: 'en' | 'zh'): Promise<ChannelVideoRow[]> {
   return storyFetch<ChannelVideoRow[]>(`/analytics/channel?lang=${lang}`)
+}
+
+/**
+ * Fetch all published Shorts-style videos (e.g. health_log), newest first,
+ * with analytics data. Sibling of fetchChannelVideos() for the deep-story
+ * pipeline — separate endpoint because shorts have no story_set_id linkage.
+ * Omit `lang` to get all languages.
+ */
+export async function fetchShortsVideos(lang?: string): Promise<ShortVideoRow[]> {
+  return storyFetch<ShortVideoRow[]>('/analytics/shorts', lang ? { lang } : undefined)
 }
 
 export async function fetchStrategyChanges(): Promise<StrategyChange[]> {

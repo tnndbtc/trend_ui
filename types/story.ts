@@ -241,11 +241,44 @@ export interface ChannelVideoRow {
   comment_count:       number | null
   analytics_pulled_at: string | null     // null=pending, 'no_data'=gave up, ISO=fetched
   traffic_sources:     Record<string, number> | null   // {"YT_SEARCH": 42, "SUGGESTED_VIDEOS": 31, ...}
+  search_terms:        Record<string, number> | null   // {"search term": views, ...} — YT_SEARCH detail;
+                                                          // YouTube redacts low-volume terms, so null is common
+  sharing_sources:     Record<string, number> | null   // {"WHATSAPP": 4, "TWITTER": 2, ...}
   watch_time_hours:    number | null
   shares:              number | null
   subscribers_gained:  number | null
   dislikes:            number | null     // Analytics API owner-only estimate
   has_retention_curve: boolean           // true if a per-video retention curve was fetched
+}
+
+// ---------------------------------------------------------------------------
+// Shorts analytics  (GET /api/analytics/shorts?lang=en) — e.g. health_log
+// ---------------------------------------------------------------------------
+
+/** One published Shorts-style video — sibling of ChannelVideoRow, but title/topic
+ *  come straight from the DB row, since there's no story_set_id linkage to join through. */
+export interface ShortVideoRow {
+  video_id:            string
+  lang:                string            // 'en' | 'es' | 'zh' | ...
+  upload_profile:      string
+  channel_id:          string
+  title:               string | null
+  topic:               string | null     // e.g. "Sleep Log" — the short's topic badge
+  published_at:        string | null     // ISO datetime
+  views:               number | null
+  avg_view_duration:   number | null     // seconds
+  avg_view_pct:        number | null     // %
+  like_count:          number | null
+  comment_count:       number | null
+  analytics_pulled_at: string | null     // null=pending, 'no_data'=gave up, ISO=fetched
+  traffic_sources:     Record<string, number> | null
+  search_terms:        Record<string, number> | null   // see ChannelVideoRow.search_terms
+  sharing_sources:     Record<string, number> | null   // see ChannelVideoRow.sharing_sources
+  watch_time_hours:    number | null
+  shares:              number | null
+  subscribers_gained:  number | null
+  dislikes:            number | null
+  has_retention_curve: boolean
 }
 
 // ---------------------------------------------------------------------------

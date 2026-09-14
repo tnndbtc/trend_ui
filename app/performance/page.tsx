@@ -1,8 +1,8 @@
 'use client'
 
 import { useEffect, useState, useMemo } from 'react'
-import { fetchChannelVideos, fetchStrategyChanges, refreshChannelAnalytics, fetchChannelAudience, fetchChannelSubscriberSplit } from '@/lib/api/stories'
-import type { ChannelVideoRow, StrategyChange, ChannelAudienceSnapshot } from '@/types/story'
+import { fetchChannelVideos, fetchStrategyChanges, refreshChannelAnalytics, fetchChannelAudience, fetchChannelSubscriberSplit, fetchShortsVideos, fetchVideoRetentionCurve } from '@/lib/api/stories'
+import type { ChannelVideoRow, StrategyChange, ChannelAudienceSnapshot, ShortVideoRow, RetentionCurvePoint } from '@/types/story'
 import SubscriberSplitCard from '@/components/SubscriberSplitCard'
 import AudienceCountryList from '@/components/AudienceCountryList'
 
@@ -102,15 +102,6 @@ const TRAFFIC_SOURCE_LABELS: Record<string, string> = {
   SUBSCRIBER:        'Subscriber feed',
 }
 
-/** Top traffic source key + its share of total views, or null if no data. */
-function topTrafficSource(traffic: Record<string, number> | null | undefined): { key: string; pct: number } | null {
-  if (!traffic || Object.keys(traffic).length === 0) return null
-  const total = Object.values(traffic).reduce((s, v) => s + v, 0)
-  if (total === 0) return null
-  const [key, views] = Object.entries(traffic).sort((a, b) => b[1] - a[1])[0]
-  return { key, pct: (views / total) * 100 }
-}
-
 function retentionColor(pct: number | null | undefined): string {
   if (pct == null) return 'text-muted-foreground'
   if (pct >= 30)   return 'text-green-600 dark:text-green-400'
@@ -151,11 +142,152 @@ function CategoryBadge({ profileId }: { profileId: string | null }) {
   )
 }
 
+// ── generic expandable "top item + full breakdown" button, used for traffic
+// sources, search terms, and sharing-service breakdowns ──────────────────────
+
+const SHARING_SERVICE_LABELS: Record<string, string> = {
+  WHATSAPP:      'WhatsApp',
+  TWITTER:       'X / Twitter',
+  FACEBOOK:      'Facebook',
+  COPY_PASTE:    'Copy link',
+  EMBED:         'Embed',
+  TELEGRAM:      'Telegram',
+  SMS:           'SMS',
+  MOBILE_MMS:    'MMS',
+  ANDROID_MESSAGES: 'Messages',
+  LINE:          'LINE',
+  REDDIT:        'Reddit',
+  LINKEDIN:      'LinkedIn',
+  PINTEREST:     'Pinterest',
+  GOOGLEPLUS:    'Google+',
+  OTHER:         'Other',
+}
+
+function BreakdownButton({
+  icon, data, labelFor, tooltipPrefix,
+}: {
+  icon: string
+  data: Record<string, number> | null | undefined
+  labelFor?: (key: string) => string
+  tooltipPrefix: string
+}) {
+  const [expanded, setExpanded] = useState(false)
+  if (!data || Object.keys(data).length === 0) return null
+
+  const total  = Object.values(data).reduce((s, v) => s + v, 0)
+  const sorted = Object.entries(data).sort((a, b) => b[1] - a[1])
+  const [topKey, topVal] = sorted[0]
+  const topPct = total > 0 ? (topVal / total) * 100 : 0
+
+  return (
+    <span className="relative inline-block">
+      <button
+        onClick={() => setExpanded(e => !e)}
+        title={`${tooltipPrefix} · click for full breakdown`}
+        className="hover:underline"
+      >
+        {icon} <span className="font-medium text-foreground">{labelFor ? labelFor(topKey) : topKey}</span>
+        <span className="text-muted-foreground/70"> {topPct.toFixed(0)}%</span>
+      </button>
+      {expanded && (
+        <div className="absolute z-10 left-0 top-full mt-1 w-56 rounded-lg border bg-card shadow-lg p-2.5 flex flex-col gap-1 max-h-64 overflow-y-auto">
+          {sorted.map(([key, val]) => {
+            const pct = total > 0 ? (val / total) * 100 : 0
+            const label = labelFor ? labelFor(key) : key
+            return (
+              <div key={key} className="flex items-center gap-2 text-xs">
+                <span className="w-28 flex-shrink-0 text-muted-foreground truncate" title={label}>{label}</span>
+                <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
+                  <div className="h-full bg-foreground/60 rounded-full" style={{ width: `${Math.min(100, pct)}%` }} />
+                </div>
+                <span className="w-9 flex-shrink-0 text-right tabular-nums text-foreground">{pct.toFixed(0)}%</span>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </span>
+  )
+}
+
+// ── per-video retention curve (expandable, fetched on demand) ─────────────────
+
+function RetentionCurveButton({ videoId, hasCurve }: { videoId: string; hasCurve: boolean }) {
+  const [expanded, setExpanded] = useState(false)
+  const [points,   setPoints]   = useState<RetentionCurvePoint[] | null>(null)
+  const [loading,  setLoading]  = useState(false)
+  const [error,    setError]    = useState<string | null>(null)
+
+  if (!hasCurve) return null
+
+  function toggle() {
+    setExpanded(e => !e)
+    if (!points && !loading) {
+      setLoading(true)
+      setError(null)
+      fetchVideoRetentionCurve(videoId)
+        .then(c => setPoints(c.points))
+        .catch(e => setError(e.message))
+        .finally(() => setLoading(false))
+    }
+  }
+
+  // Build an SVG polyline from the curve points (0..1 time × 0..1 watch ratio)
+  const W = 220, H = 48
+  const pathD = points && points.length > 0
+    ? 'M' + points
+        .filter(p => p.audience_watch_ratio != null)
+        .map(p => `${(p.elapsed_video_time_pct * W).toFixed(1)},${(H - (p.audience_watch_ratio ?? 0) * H).toFixed(1)}`)
+        .join(' L')
+    : null
+
+  const avgRelPerf = points && points.length > 0
+    ? (() => {
+        const withPerf = points.filter(p => p.relative_performance != null)
+        return withPerf.length > 0
+          ? withPerf.reduce((s, p) => s + (p.relative_performance ?? 0), 0) / withPerf.length
+          : null
+      })()
+    : null
+
+  return (
+    <span className="relative inline-block">
+      <button onClick={toggle} title="Audience retention curve — click to view" className="hover:underline">
+        📈
+      </button>
+      {expanded && (
+        <div className="absolute z-10 right-0 top-full mt-1 w-64 rounded-lg border bg-card shadow-lg p-3">
+          {loading && <p className="text-xs text-muted-foreground">Loading…</p>}
+          {error && <p className="text-xs text-destructive">{error}</p>}
+          {!loading && !error && pathD && (
+            <>
+              <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} className="overflow-visible">
+                <polyline points={pathD.slice(1)} fill="none" stroke="currentColor"
+                  className="text-foreground/70" strokeWidth="1.5" />
+              </svg>
+              <p className="text-[11px] text-muted-foreground mt-1.5">
+                Audience retention over video length
+                {avgRelPerf != null && (
+                  <> · <span className={avgRelPerf >= 0 ? 'text-green-600 dark:text-green-400' : 'text-orange-500'}>
+                    {avgRelPerf >= 0 ? '▲' : '▼'}{Math.abs(avgRelPerf * 100).toFixed(0)}%
+                  </span> vs similar-length videos</>
+                )}
+              </p>
+            </>
+          )}
+          {!loading && !error && !pathD && (
+            <p className="text-xs text-muted-foreground">No retention data.</p>
+          )}
+        </div>
+      )}
+    </span>
+  )
+}
+
 function VideoCard({ video }: { video: ChannelVideoRow }) {
   const ytUrl     = `https://www.youtube.com/watch?v=${video.video_id}`
   const isPending = video.analytics_pulled_at === null
   const isNoData  = video.analytics_pulled_at === 'no_data'
-  const topSrc    = topTrafficSource(video.traffic_sources)
 
   return (
     <div className="rounded-xl border bg-card overflow-hidden">
@@ -186,20 +318,27 @@ function VideoCard({ video }: { video: ChannelVideoRow }) {
             {(video.like_count ?? 0) > 0 && (
               <span>👍 <span className="font-medium text-foreground">{fmt(video.like_count)}</span></span>
             )}
+            {(video.comment_count ?? 0) > 0 && (
+              <span>💬 <span className="font-medium text-foreground">{fmt(video.comment_count)}</span></span>
+            )}
             {(video.shares ?? 0) > 0 && (
               <span>🔁 <span className="font-medium text-foreground">{fmt(video.shares)}</span></span>
             )}
-            {topSrc && (
-              <span title={`${topSrc.pct.toFixed(0)}% of views from this source`}>
-                🧭 <span className="font-medium text-foreground">
-                  {TRAFFIC_SOURCE_LABELS[topSrc.key] ?? topSrc.key}
-                </span>
-                <span className="text-muted-foreground/70"> {topSrc.pct.toFixed(0)}%</span>
-              </span>
+            {(video.subscribers_gained ?? 0) > 0 && (
+              <span>➕ <span className="font-medium text-foreground">{fmt(video.subscribers_gained)}</span> subs</span>
             )}
-            {video.has_retention_curve && (
-              <span title="Audience retention curve available">📈</span>
+            {video.watch_time_hours != null && video.watch_time_hours > 0 && (
+              <span>🕒 <span className="font-medium text-foreground">{video.watch_time_hours.toFixed(1)}h</span> watched</span>
             )}
+            {(video.dislikes ?? 0) > 0 && (
+              <span>👎 <span className="font-medium text-foreground">{fmt(video.dislikes)}</span></span>
+            )}
+            <BreakdownButton icon="🧭" data={video.traffic_sources} tooltipPrefix="Traffic source"
+              labelFor={k => TRAFFIC_SOURCE_LABELS[k] ?? k} />
+            <BreakdownButton icon="🔍" data={video.search_terms} tooltipPrefix="Search term" />
+            <BreakdownButton icon="📤" data={video.sharing_sources} tooltipPrefix="Shared via"
+              labelFor={k => SHARING_SERVICE_LABELS[k] ?? k} />
+            <RetentionCurveButton videoId={video.video_id} hasCurve={video.has_retention_curve} />
             {isPending && <span className="text-muted-foreground/60">⏳ pending</span>}
             {isNoData  && <span className="text-muted-foreground/60">📭 no data</span>}
           </div>
@@ -521,9 +660,219 @@ function AudiencePanel({ audience }: { audience: ChannelAudienceSnapshot | null 
   )
 }
 
+// ── ShortsPanel (health_log-style Shorts, separate from the deep-story pipeline) ──
+
+function ShortVideoCard({ video }: { video: ShortVideoRow }) {
+  const ytUrl     = `https://www.youtube.com/watch?v=${video.video_id}`
+  const isPending = video.analytics_pulled_at === null
+  const isNoData  = video.analytics_pulled_at === 'no_data'
+
+  return (
+    <div className="rounded-xl border bg-card overflow-hidden">
+      <div className="px-4 py-3 flex items-start gap-3">
+        <a href={ytUrl} target="_blank" rel="noopener noreferrer"
+           className="flex-shrink-0 w-12 h-16 rounded-md overflow-hidden bg-muted hover:opacity-80 transition-opacity">
+          <img
+            src={`https://i.ytimg.com/vi/${video.video_id}/mqdefault.jpg`}
+            alt={video.title ?? video.video_id}
+            className="w-full h-full object-cover"
+          />
+        </a>
+        <div className="flex-1 min-w-0">
+          <div className="mb-1 flex items-center gap-1.5 flex-wrap">
+            {video.topic && (
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
+                {video.topic}
+              </span>
+            )}
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-muted text-muted-foreground uppercase">
+              {video.lang}
+            </span>
+          </div>
+          <a href={ytUrl} target="_blank" rel="noopener noreferrer"
+             className="text-sm font-semibold hover:underline leading-snug line-clamp-2 block mb-1.5">
+            {video.title ?? video.video_id}
+          </a>
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+            <span className="text-foreground/60">{fmtTime(video.published_at)}</span>
+            <span>👁 <span className="font-medium text-foreground">{fmt(video.views)}</span></span>
+            <span>⏱ <span className={`font-medium ${video.avg_view_duration != null ? 'text-foreground' : ''}`}>
+              {fmtDuration(video.avg_view_duration)}
+            </span></span>
+            <span>📊 <span className={`font-medium ${retentionColor(video.avg_view_pct)}`}>
+              {video.avg_view_pct != null ? `${video.avg_view_pct.toFixed(1)}%` : '—'}
+            </span></span>
+            {(video.like_count ?? 0) > 0 && (
+              <span>👍 <span className="font-medium text-foreground">{fmt(video.like_count)}</span></span>
+            )}
+            {(video.comment_count ?? 0) > 0 && (
+              <span>💬 <span className="font-medium text-foreground">{fmt(video.comment_count)}</span></span>
+            )}
+            {(video.shares ?? 0) > 0 && (
+              <span>🔁 <span className="font-medium text-foreground">{fmt(video.shares)}</span></span>
+            )}
+            {(video.subscribers_gained ?? 0) > 0 && (
+              <span>➕ <span className="font-medium text-foreground">{fmt(video.subscribers_gained)}</span> subs</span>
+            )}
+            {video.watch_time_hours != null && video.watch_time_hours > 0 && (
+              <span>🕒 <span className="font-medium text-foreground">{video.watch_time_hours.toFixed(1)}h</span> watched</span>
+            )}
+            {(video.dislikes ?? 0) > 0 && (
+              <span>👎 <span className="font-medium text-foreground">{fmt(video.dislikes)}</span></span>
+            )}
+            <BreakdownButton icon="🧭" data={video.traffic_sources} tooltipPrefix="Traffic source"
+              labelFor={k => TRAFFIC_SOURCE_LABELS[k] ?? k} />
+            <BreakdownButton icon="🔍" data={video.search_terms} tooltipPrefix="Search term" />
+            <BreakdownButton icon="📤" data={video.sharing_sources} tooltipPrefix="Shared via"
+              labelFor={k => SHARING_SERVICE_LABELS[k] ?? k} />
+            <RetentionCurveButton videoId={video.video_id} hasCurve={video.has_retention_curve} />
+            {isPending && <span className="text-muted-foreground/60">⏳ pending</span>}
+            {isNoData  && <span className="text-muted-foreground/60">📭 no data</span>}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+type ShortsLang = 'en' | 'es' | 'zh'
+
+// NOTE: these playlist ids were pasted truncated (~13 chars; real YouTube
+// playlist ids are ~34 chars) — only used for the "↗ playlist" outbound
+// link, so a wrong id just breaks that one link. Confirm/replace with the
+// full ids.
+const SHORTS_TAB_META: Record<ShortsLang, { label: string; emoji: string; playlist: string }> = {
+  en: { label: 'English', emoji: '🇬🇧', playlist: 'PLcRRvYYqAdnw' },
+  es: { label: 'Spanish', emoji: '🇪🇸', playlist: 'PLQkcnWmn3_DE' },
+  zh: { label: 'Chinese', emoji: '🇨🇳', playlist: 'PLC4ruWqD3v0s' },
+}
+
+function ShortsPanel() {
+  const [activeLang,    setActiveLang]    = useState<ShortsLang>('en')
+  const [videosByLang,  setVideosByLang]  = useState<Record<ShortsLang, ShortVideoRow[]>>({ en: [], es: [], zh: [] })
+  const [loadingByLang, setLoadingByLang] = useState<Record<ShortsLang, boolean>>({ en: true, es: true, zh: true })
+  const [errorByLang,   setErrorByLang]   = useState<Record<ShortsLang, string | null>>({ en: null, es: null, zh: null })
+  const [refreshing,    setRefreshing]    = useState(false)
+
+  function loadAllLangs() {
+    for (const lang of ['en', 'es', 'zh'] as ShortsLang[]) {
+      setLoadingByLang(prev => ({ ...prev, [lang]: true }))
+      setErrorByLang(prev => ({ ...prev, [lang]: null }))
+      fetchShortsVideos(lang)
+        .then(vids => setVideosByLang(prev => ({ ...prev, [lang]: vids })))
+        .catch(e  => setErrorByLang(prev => ({ ...prev, [lang]: e.message })))
+        .finally(()  => setLoadingByLang(prev => ({ ...prev, [lang]: false })))
+    }
+  }
+
+  useEffect(() => {
+    loadAllLangs()
+
+    // Auto-trigger a background YouTube analytics pull on every page load,
+    // then re-fetch once fetch_analytics.py has had time to write updated
+    // rows. Best-effort: on failure we just keep showing the last-known data.
+    setRefreshing(true)
+    refreshChannelAnalytics()
+      .then(() => new Promise(r => setTimeout(r, 20_000)))
+      .then(() => loadAllLangs())
+      .catch(() => {})
+      .finally(() => setRefreshing(false))
+  }, [])
+
+  const videos  = videosByLang[activeLang]
+  const loading = loadingByLang[activeLang]
+  const error   = errorByLang[activeLang]
+
+  const totalViews = videos.reduce((s, v) => s + (v.views ?? 0), 0)
+  const withRetention = videos.filter(v => v.avg_view_pct != null)
+  const avgRetention = withRetention.length > 0
+    ? withRetention.reduce((s, v) => s + (v.avg_view_pct ?? 0), 0) / withRetention.length
+    : null
+  const pendingCount = videos.filter(v => v.analytics_pulled_at === null).length
+
+  return (
+    <>
+      {/* ── locale sub-tabs ── */}
+      <div className="flex items-center justify-between gap-3 mb-5 border-b">
+        <div className="flex gap-1">
+          {(['en', 'es', 'zh'] as ShortsLang[]).map(lang => (
+            <button
+              key={lang}
+              onClick={() => setActiveLang(lang)}
+              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors -mb-px ${
+                activeLang === lang
+                  ? 'border-foreground text-foreground'
+                  : 'border-transparent text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {SHORTS_TAB_META[lang].emoji} {SHORTS_TAB_META[lang].label}
+              {loadingByLang[lang] && (
+                <span className="ml-1.5 inline-block w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin align-middle" />
+              )}
+            </button>
+          ))}
+        </div>
+        <a
+          href={`https://www.youtube.com/playlist?list=${SHORTS_TAB_META[activeLang].playlist}`}
+          target="_blank" rel="noopener noreferrer"
+          className="flex-shrink-0 mb-2 text-xs text-muted-foreground hover:text-foreground"
+        >
+          ↗ playlist
+        </a>
+      </div>
+
+      {refreshing && (
+        <p className="flex items-center gap-1.5 text-xs text-muted-foreground mb-3">
+          <span className="inline-block w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+          Refreshing YouTube analytics…
+        </p>
+      )}
+
+      {loading && (
+        <div className="flex items-center justify-center py-16 text-muted-foreground">Loading…</div>
+      )}
+
+      {error && !loading && (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive mb-6">
+          {error}
+        </div>
+      )}
+
+      {!loading && !error && videos.length === 0 && (
+        <div className="rounded-xl border border-dashed p-10 text-center text-muted-foreground">
+          <p className="text-4xl mb-3">🎬</p>
+          <p className="font-medium">No {SHORTS_TAB_META[activeLang].label} Health_app Shorts published yet</p>
+        </div>
+      )}
+
+      {!loading && !error && videos.length > 0 && (
+      <>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+        <StatCard label="Shorts"       value={fmt(videos.length)} />
+        <StatCard label="Total views"  value={fmt(totalViews)} />
+        <StatCard
+          label="Avg retention"
+          value={avgRetention != null ? `${avgRetention.toFixed(1)}%` : '—'}
+          sub={withRetention.length > 0 ? `${withRetention.length} with data` : undefined}
+        />
+        <StatCard label="Pending" value={fmt(pendingCount)} sub="analytics < 72h" />
+      </div>
+
+      <div className="flex flex-col gap-3">
+        {videos.map(v => <ShortVideoCard key={v.video_id} video={v} />)}
+      </div>
+      </>
+      )}
+    </>
+  )
+}
+
 // ── page ──────────────────────────────────────────────────────────────────────
 
+type ContentTab = 'stories' | 'shorts'
+
 export default function PerformancePage() {
+  const [contentTab,   setContentTab]   = useState<ContentTab>('stories')
   const [activeLang,   setActiveLang]   = useState<Lang>('en')
   const [videosByLang, setVideosByLang] = useState<Record<Lang, ChannelVideoRow[]>>({ en: [], zh: [] })
   const [loadingLang,  setLoadingLang]  = useState<Record<Lang, boolean>>({ en: true, zh: true })
@@ -593,23 +942,28 @@ export default function PerformancePage() {
         <div>
           <h1 className="text-2xl font-bold">Channel Performance</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Deep-story videos · views, watch time &amp; retention
-            {lastFetched && (
+            {contentTab === 'stories'
+              ? <>Deep-story videos · views, watch time &amp; retention</>
+              : <>Health_app Shorts (health_log) · views, watch time &amp; retention</>}
+            {contentTab === 'stories' && lastFetched && (
               <span className="ml-2">· analytics refreshed {fmtTime(lastFetched)}</span>
             )}
           </p>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
-          <a
-            href={`https://www.youtube.com/channel/${CHANNEL_IDS[activeLang]}`}
-            target="_blank" rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors hover:bg-muted"
-          >
-            ↗ YouTube
-          </a>
+          {contentTab === 'stories' && (
+            <a
+              href={`https://www.youtube.com/channel/${CHANNEL_IDS[activeLang]}`}
+              target="_blank" rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors hover:bg-muted"
+            >
+              ↗ YouTube
+            </a>
+          )}
           <button
             onClick={handleRefresh}
             disabled={refreshing || loading}
+            title="Runs fetch_analytics.py, which refreshes both deep-story videos and Shorts"
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors disabled:opacity-50 hover:bg-muted"
           >
             {refreshing ? (
@@ -622,6 +976,30 @@ export default function PerformancePage() {
         </div>
       </div>
 
+      {/* ── Deep Stories / Shorts top-level tabs ── */}
+      <div className="flex gap-1 mb-4 border-b">
+        {([
+          { key: 'stories' as ContentTab, label: '📖 Deep Stories' },
+          { key: 'shorts'  as ContentTab, label: '🎬 Health_app' },
+        ]).map(t => (
+          <button
+            key={t.key}
+            onClick={() => setContentTab(t.key)}
+            className={`px-5 py-2 text-sm font-medium border-b-2 transition-colors -mb-px ${
+              contentTab === t.key
+                ? 'border-foreground text-foreground'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {contentTab === 'shorts' ? (
+        <ShortsPanel />
+      ) : (
+      <>
       {/* ── EN / ZH tabs ── */}
       <div className="flex gap-1 mb-6 border-b">
         {(['en', 'zh'] as Lang[]).map(lang => (
@@ -717,6 +1095,8 @@ export default function PerformancePage() {
             </>
           )}
         </>
+      )}
+      </>
       )}
     </div>
   )
